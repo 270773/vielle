@@ -38,7 +38,7 @@ def _split_uncovered(ecarts: list[dict], cover: np.ndarray) -> tuple[list[dict],
     """Regroupe en un seul ecart tout ce qui tombe dans la partie de l'etiquette absente du scan."""
     solid = cv2.erode((cover > 127).astype(np.uint8), np.ones((15, 15), np.uint8))
     missing_ratio = 1 - float(solid.mean())
-    if missing_ratio < 0.03:
+    if missing_ratio < 0.05:
         return ecarts, None
     keep = []
     for e in ecarts:
@@ -61,13 +61,13 @@ def _model_bundle(path: str, mtime_ns: int):
     img = imaging.load_model(Path(path), config.RENDER_DPI)
     f = config.WORK_SIZE / max(img.shape[:2])  # taille de travail fixe : OCR/comparaison sur une echelle stable
     img = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC if f > 1 else cv2.INTER_AREA)
-    return img, visual.model_features(img), textcmp.text_regions(img), barcodes.read(img)
+    return img, visual.model_features(img), textcmp.text_regions(img), barcodes.read(img), barcodes.locate(img)
 
 
 def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
         model_lang: str | None = None, label_lang: str | None = None, use_ocr: bool | None = None) -> Result:
     use_ocr = config.USE_OCR if use_ocr is None else use_ocr
-    model_img, features, regions, expected_codes = _model_bundle(str(model_pdf), model_pdf.stat().st_mtime_ns)
+    model_img, features, regions, expected_codes, code_boxes = _model_bundle(str(model_pdf), model_pdf.stat().st_mtime_ns)
     recv = imaging.normalize_received(image, max(model_img.shape[:2]))
     recv_aligned, aligned, cover = visual.align(recv, model_img, features)
 
@@ -89,9 +89,9 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
         model_text = recv_text = ""
         text_ecarts, text_sim = textcmp.compare_regions(regions, model_cmp, recv_aligned)
     code_ecarts, codes = barcodes.compare(model_img, recv_aligned, image, expected=expected_codes)
-    vis_ecarts, ssim, overlay = visual.diff(model_cmp, recv_aligned, ignore_boxes=[r["box"] for r in regions] if not use_ocr else ())
+    vis_ecarts, ssim, overlay = visual.diff(model_cmp, recv_aligned, ignore_boxes=([r["box"] for r in regions] if not use_ocr else []) + code_boxes)
 
-    col_ecarts = visual.color_diff(model_cmp, recv_aligned, overlay)
+    col_ecarts = visual.color_diff(model_cmp, recv_aligned, overlay, ignore_boxes=code_boxes)
     for e in text_ecarts:  # zones de texte differentes : cadre orange
         x, y, w, h = (int(v) for v in e["zone"].split(","))
         cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 140, 255), 4)

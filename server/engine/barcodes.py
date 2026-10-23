@@ -13,6 +13,13 @@ def read(img: np.ndarray) -> list[tuple[str, str]]:
     return sorted(found)
 
 
+def locate(img: np.ndarray, margin: int = 8) -> list[tuple[int, int, int, int]]:
+    """Boites (x, y, w, h) des codes-barres/QR : leur valeur est verifiee a part, pas par comparaison d'image."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return [(max(c.rect.left - margin, 0), max(c.rect.top - margin, 0), c.rect.width + 2 * margin, c.rect.height + 2 * margin)
+            for c in pyzbar.decode(gray)]
+
+
 def compare(model_img: np.ndarray, recv_img: np.ndarray, *extra: np.ndarray, expected=None) -> tuple[list[dict], dict]:
     # `extra` : images supplementaires (photo originale, pleine resolution) pour fiabiliser la lecture
     exp = read(model_img) if expected is None else expected

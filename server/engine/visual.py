@@ -99,7 +99,7 @@ def color_name(bgr) -> str:
 
 
 def color_diff(model: np.ndarray, recv_aligned: np.ndarray, out: np.ndarray, threshold: float = 14.0,
-               min_area_ratio: float = 0.0006):
+               min_area_ratio: float = 0.0006, ignore_boxes=()):
     """Ecarts de couleur : deltaE (CIELAB) entre les deux images lissees, par zones."""
     def lab(img):
         small = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
@@ -111,6 +111,8 @@ def color_diff(model: np.ndarray, recv_aligned: np.ndarray, out: np.ndarray, thr
     mask = (de > threshold).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
     _clear_border(mask)
+    for x, y, w, h in ignore_boxes:
+        mask[y:y + h, x:x + w] = 0
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     H, W = mask.shape
     ecarts = []
