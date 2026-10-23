@@ -116,3 +116,19 @@ def test_scan_depose_dans_le_dossier_d_entree(models, tmp_path):
         r = c.post("/api/controles", data={"modele_id": mid, "scan": "scan001.png"})
         assert r.status_code == 200 and r.json()["statut"] == "NON_CONFORME"
         assert c.get("/api/scans").json() == []
+
+
+def test_detection_automatique_du_modele(models, tmp_path):
+    from server.main import app
+    root = models.parent if False else models
+    make_label_pdf(root / "Acme" / "ETIQ_ETHANOL_96_E200123_20kg.pdf", h_code="H225", ean="4006381333931", body="Ethanol 96 % vol")
+    with TestClient(app) as c:
+        by_name = {m["nom_produit"]: m["id"] for m in c.get("/api/modeles").json()}
+        assert any("ETHANOL" in n for n in by_name)
+        assert [m["code_etiquette"] for m in c.get("/api/modeles", params={"q": "ethanol"}).json()] == ["E200123"]
+        scan = cv2.imencode(".png", _a4_scan(scan_of(models / "Acme" / "ETIQ_ETHANOL_96_E200123_20kg.pdf", tmp_path), tmp_path))[1].tobytes()
+        r = c.post("/api/identifier", files={"image": ("s.png", scan, "image/png")}).json()
+        assert r["sur"] and "ETHANOL" in r["candidats"][0]["nom"] and r["candidats"][0]["ean"]
+        r = c.post("/api/controles", files={"image": ("s.png", scan, "image/png")})  # sans modele_id
+        assert r.status_code == 200 and r.json()["statut"] in ("CONFORME", "A_REVOIR"), r.text
+        assert c.post("/api/controles", files={"image": ("x.png", cv2.imencode(".png", np.full((300, 300, 3), 200, np.uint8))[1].tobytes(), "image/png")}).status_code == 409

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, report
+from . import config, db, identify, report
 from .engine import imaging, pipeline, textcmp
 
 app = FastAPI(title="LabelQC")
@@ -31,12 +31,21 @@ def health():
 
 
 @app.get("/api/modeles")
-def modeles():
+def modeles(q: str = ""):
+    """Modeles indexes ; `q` filtre sur le nom du produit ou le code d'etiquette."""
     db.sync_models()
     with db.conn() as c:
-        return [dict(r) for r in c.execute(
-            "SELECT id, ref_produit, fournisseur, langue, version, date_validation FROM modeles_pdf "
-            "ORDER BY fournisseur, ref_produit, version")]
+        rows = [dict(r) for r in c.execute(
+            "SELECT id, ref_produit, fournisseur, langue, version, date_validation, nom_produit, code_etiquette "
+            "FROM modeles_pdf ORDER BY fournisseur, nom_produit, version")]
+    toks = identify._tokens(q)
+    return [r for r in rows if all(t in identify._fold(f"{r['nom_produit']} {r['code_etiquette']} {r['ref_produit']} {r['fournisseur']}") for t in toks)]
+
+
+@app.post("/api/identifier")
+async def identifier(image: UploadFile | None = File(None), scan: str = Form(""), q: str = Form("")):
+    """Propose les modeles correspondant a l'etiquette (code-barres + ressemblance visuelle)."""
+    return identify.identify(await _read_input(image, scan), q)
 
 
 @app.get("/api/langues")
@@ -71,6 +80,19 @@ def scan_apercu(nom: str):
     return Response(cv2.imencode(".jpg", _small(imaging.decode_image(f.read_bytes())))[1].tobytes(), media_type="image/jpeg")
 
 
+async def _read_input(image, scan: str):
+    if scan:
+        data = _scan_path(scan).read_bytes()
+    elif image is not None:
+        data = await image.read()
+    else:
+        raise HTTPException(400, "Fournir un scan du dossier d'entree ou une image")
+    try:
+        return imaging.decode_image(data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 def _small(img, side: int = 900):
     k = side / max(img.shape[:2])
     return cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_AREA) if k < 1 else img
@@ -84,23 +106,28 @@ def _scan_path(nom: str) -> Path:
 
 
 @app.post("/api/controles")
-async def creer_controle(request: Request, modele_id: int = Form(...), langue_etiquette: str = Form(""),
-                         image: UploadFile | None = File(None), scan: str = Form(""), x_user: str = Header("anonyme")):
-    with db.conn() as c:
-        m = c.execute("SELECT * FROM modeles_pdf WHERE id=?", (modele_id,)).fetchone()
-    if not m:
-        raise HTTPException(404, "Modele inconnu")
-    if scan:
-        scan_file = _scan_path(scan)
-        data = scan_file.read_bytes()
-    elif image is not None:
-        scan_file, data = None, await image.read()
-    else:
+async def creer_controle(request: Request, modele_id: int | None = Form(None), langue_etiquette: str = Form(""),
+                         image: UploadFile | None = File(None), scan: str = Form(""), q: str = Form(""),
+                         x_user: str = Header("anonyme")):
+    """Controle d'une etiquette. Sans `modele_id`, le modele est detecte automatiquement (`q` = nom/code optionnel)."""
+    scan_file = _scan_path(scan) if scan else None
+    data = scan_file.read_bytes() if scan_file else (await image.read() if image is not None else b"")
+    if not data:
         raise HTTPException(400, "Fournir un scan du dossier d'entree ou une image")
     try:
         img = imaging.decode_image(data)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    if modele_id is None:
+        found = identify.identify(img, q)
+        if not found["sur"]:
+            raise HTTPException(409, detail={"message": "Modele non identifie avec certitude : choisir un candidat",
+                                             "candidats": found["candidats"]})
+        modele_id = found["candidats"][0]["modele_id"]
+    with db.conn() as c:
+        m = c.execute("SELECT * FROM modeles_pdf WHERE id=?", (modele_id,)).fetchone()
+    if not m:
+        raise HTTPException(404, "Modele inconnu")
     res = pipeline.run(Path(m["chemin_reseau"]), img,
                        langs=textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]) if config.USE_OCR else None, model_lang=m["langue"], label_lang=langue_etiquette or None)
 

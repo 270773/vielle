@@ -24,6 +24,17 @@ uvicorn server.main:app --host 0.0.0.0 --port 8000
 pytest
 ```
 
+## Détection automatique du modèle
+
+Les modèles (PDF d'imprimeur ou images) sont déposés n'importe où sous `LABELQC_PDF_ROOT` (dossier réseau) ; ils sont
+indexés automatiquement. Le **nom du produit** et le **code d'étiquette** sont déduits du nom du fichier
+(`737042-…-ETIQ_INVENTIS_PREMIX_RUSTIC_5__F701007_…pdf` → « INVENTIS PREMIX RUSTIC 5 », codes `737042 F701007`),
+ou d'un fichier `<nom>.json` voisin (`{"nom": "...", "code": "..."}`).
+`POST /api/controles` sans `modele_id` identifie le modèle : code-barres lu sur l'étiquette + ressemblance visuelle
+(indépendant de la langue). `q` (nom/code, facultatif) restreint la recherche. Si le modèle n'est pas identifié avec
+certitude, l'API répond 409 avec les candidats. `GET /api/modeles?q=` recherche par nom ou code ;
+`POST /api/identifier` renvoie les candidats classés.
+
 ## Scan de l'étiquette reçue (méthode recommandée)
 
 - Régler le scanner en « scan vers dossier » (PNG, JPEG, TIFF ou PDF, 300–600 dpi, couleur) vers `LABELQC_SCAN_INBOX`
