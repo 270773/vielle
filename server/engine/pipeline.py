@@ -46,7 +46,8 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
     code_ecarts, codes = barcodes.compare(model_img, recv_aligned, image)
     vis_ecarts, ssim, overlay = visual.diff(model_img, recv_aligned)
 
-    ecarts = code_ecarts + text_ecarts + vis_ecarts
+    col_ecarts = visual.color_diff(model_img, recv_aligned, overlay)
+    ecarts = code_ecarts + text_ecarts + vis_ecarts + col_ecarts
     mismatch = not aligned or (text_sim < 0.3 and ssim < 0.7)  # le recalage a pu s'accrocher au logo commun
     if mismatch:
         ecarts.insert(0, {"zone": "etiquette", "type_ecart": "etiquette_non_reconnue", "criticite": 3,

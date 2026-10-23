@@ -69,6 +69,13 @@ def _fold(t: str) -> str:
     return "".join(c for c in t if not unicodedata.combining(c)).casefold().strip(".,;:()")
 
 
+def _iou(a, b) -> float:
+    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
+    x1, y1 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    inter = max(x1 - x0, 0) * max(y1 - y0, 0)
+    return inter / (a[2] * a[3] + b[2] * b[3] - inter or 1)
+
+
 def _present(model_gray: np.ndarray, recv_gray: np.ndarray, box, margin: int = 10, thresh: float = 0.55) -> bool:
     """Le mot du modele est-il visuellement present (a +-margin px) dans l'image recue ?"""
     x, y, w, h = box
@@ -107,7 +114,8 @@ def compare_words(model_words, recv_words, model_img, recv_img) -> tuple[list[di
         if has_digit:
             # Un chiffre different tient a un pixel : l'accord de l'OCR est exige ; sans lecture OCR
             # exploitable de l'etiquette, la correlation d'image doit etre tres elevee.
-            conflicting = any(any(ch.isdigit() for ch in c["text"]) and r < 1.0 for c, r in zip(cands, ratios))
+            conflicting = any(any(ch.isdigit() for ch in c["text"]) and r < 1.0 and _iou(c["box"], w["box"]) >= 0.5
+                              for c, r in zip(cands, ratios))  # meme emplacement, autre valeur
             ok_word = (1.0 in ratios) or (not conflicting and _present(mg, rg, w["box"], thresh=0.8))
         else:
             ok_word = any(r >= 0.85 for r in ratios) or _present(mg, rg, w["box"], thresh=0.7)
