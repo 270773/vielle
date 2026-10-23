@@ -17,9 +17,14 @@ def load_model(path: Path, dpi: int) -> np.ndarray:
     return decode_image(path.read_bytes())
 
 
+def _trim(page) -> "pymupdf.Rect":
+    """Zone utile : TrimBox du PDF si presente (exclut reperes de coupe, fonds perdus et ligne de slug)."""
+    return page.trimbox if page.trimbox != page.mediabox else page.rect
+
+
 def render_pdf(path: Path, dpi: int, page: int = 0) -> np.ndarray:
     with pymupdf.open(path) as doc:
-        pix = doc[page].get_pixmap(dpi=dpi, alpha=False)
+        pix = doc[page].get_pixmap(dpi=dpi, alpha=False, clip=_trim(doc[page]))
         img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
     return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
@@ -29,7 +34,7 @@ def pdf_text(path: Path, page: int = 0) -> str:
     if path.suffix.lower() != ".pdf":
         return ""
     with pymupdf.open(path) as doc:
-        return doc[page].get_text("text")
+        return doc[page].get_text("text", clip=_trim(doc[page]))
 
 
 def decode_image(data: bytes) -> np.ndarray:

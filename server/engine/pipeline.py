@@ -35,16 +35,24 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
 
     model_words = textcmp.ocr_words(model_img, langs)
     recv_words = textcmp.ocr_words(recv_aligned, langs)
-    model_text = imaging.pdf_text(model_pdf).strip() or textcmp.words_to_text(model_words)
+    native = imaging.pdf_text(model_pdf).strip()
+    # Beaucoup de PDF d'imprimeur ont le texte vectorise : peu de texte natif => on s'appuie sur l'OCR.
+    model_text = native if len(native.split()) >= 15 else textcmp.words_to_text(model_words)
     recv_text = textcmp.words_to_text(recv_words)
     if model_lang and label_lang and model_lang != label_lang:
         recv_text = textcmp.translate(recv_text, label_lang, model_lang)
 
     text_ecarts, text_sim = textcmp.compare_words(model_words, recv_words, model_img, recv_aligned)
-    code_ecarts, codes = barcodes.compare(model_img, recv_aligned)
+    code_ecarts, codes = barcodes.compare(model_img, recv_aligned, image)
     vis_ecarts, ssim, overlay = visual.diff(model_img, recv_aligned)
 
     ecarts = code_ecarts + text_ecarts + vis_ecarts
+    mismatch = not aligned or (text_sim < 0.3 and ssim < 0.7)  # le recalage a pu s'accrocher au logo commun
+    if mismatch:
+        ecarts.insert(0, {"zone": "etiquette", "type_ecart": "etiquette_non_reconnue", "criticite": 3,
+                          "valeur_attendue": "etiquette correspondant au modele",
+                          "valeur_trouvee": "impossible de recaler l'image sur le modele (mauvais modele, image floue ou trop partielle ?)"})
+    ecarts = sorted(ecarts, key=lambda e: -e["criticite"])[:100]
     worst = max((e["criticite"] for e in ecarts), default=0)
     statut = "CONFORME" if worst == 0 else "A_REVOIR" if worst == 1 else "NON_CONFORME"
     barcode_ok = 0.0 if code_ecarts else 1.0

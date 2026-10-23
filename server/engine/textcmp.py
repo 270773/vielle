@@ -79,9 +79,16 @@ def compare_words(model_words, recv_words, model_img, recv_img) -> tuple[list[di
     model_words = [w for w in model_words if w["box"][3] >= 12]  # micro-mots = bruit de photo de fond
     for w in model_words:
         cands = near(w["box"], recv_words, 40)
-        has_digit = any(ch.isdigit() for ch in w["text"])  # un chiffre different tient a un pixel : seuils stricts
-        if any(SequenceMatcher(None, _fold(w["text"]), _fold(c["text"])).ratio() >= (1.0 if has_digit else 0.85) for c in cands) \
-                or _present(mg, rg, w["box"], thresh=0.92 if has_digit else 0.7):
+        has_digit = any(ch.isdigit() for ch in w["text"])
+        ratios = [SequenceMatcher(None, _fold(w["text"]), _fold(c["text"])).ratio() for c in cands]
+        if has_digit:
+            # Un chiffre different tient a un pixel : l'accord de l'OCR est exige ; sans lecture OCR
+            # exploitable de l'etiquette, la correlation d'image doit etre tres elevee.
+            conflicting = any(any(ch.isdigit() for ch in c["text"]) and r < 1.0 for c, r in zip(cands, ratios))
+            ok_word = (1.0 in ratios) or (not conflicting and _present(mg, rg, w["box"], thresh=0.8))
+        else:
+            ok_word = any(r >= 0.85 for r in ratios) or _present(mg, rg, w["box"], thresh=0.7)
+        if ok_word:
             ok += 1
             continue
         got = " ".join(c["text"] for c in sorted(cands, key=lambda c: c["box"][0]))
