@@ -193,8 +193,8 @@ async def creer_controle(request: Request, modele_id: int | None = Form(None), l
         folder = config.ARCHIVE_PATH / f"controle_{cid}"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "etiquette_recue.png").write_bytes(cv2.imencode(".png", img)[1].tobytes())
-        cv2.imwrite(str(folder / "modele_rendu.png"), res.model_img)
-        cv2.imwrite(str(folder / "etiquette_alignee.png"), res.recv_aligned)
+        _write_png(folder / "modele_rendu.png", res.model_img)
+        _write_png(folder / "etiquette_alignee.png", res.recv_aligned)
         (folder / "ecarts.jpg").write_bytes(cv2.imencode(".jpg", res.overlay)[1].tobytes())
         c.execute("UPDATE controles SET image_path=?, overlay_path=? WHERE id=?",
                   (str(folder / "etiquette_recue.png"), str(folder / "ecarts.jpg"), cid))
@@ -256,9 +256,18 @@ def zone(cid: int, box: str, user: dict = Depends(auth.current_user)):
     return Response(_crop_pair(cid, x, y, w, h), media_type="image/png")
 
 
+def _write_png(path: Path, img) -> None:
+    """cv2.imwrite/imread echouent sur les chemins Windows non ASCII (accents) : on passe par des octets."""
+    path.write_bytes(cv2.imencode(".png", img)[1].tobytes())
+
+
+def _read_png(path: Path):
+    return cv2.imdecode(np.frombuffer(path.read_bytes(), np.uint8), cv2.IMREAD_COLOR) if path.exists() else None
+
+
 def _crop_pair(cid: int, x: int, y: int, w: int, h: int) -> bytes:
     folder = config.ARCHIVE_PATH / f"controle_{cid}"
-    a, b = cv2.imread(str(folder / "modele_rendu.png")), cv2.imread(str(folder / "etiquette_alignee.png"))
+    a, b = _read_png(folder / "modele_rendu.png"), _read_png(folder / "etiquette_alignee.png")
     if a is None or b is None:
         raise HTTPException(404, "Controle inconnu")
     m = 20

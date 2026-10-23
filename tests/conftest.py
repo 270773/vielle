@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-_tmp = tempfile.mkdtemp()
+_tmp = tempfile.mkdtemp(prefix="lqc_étiquettes_")  # accents : cas qui casse cv2.imwrite sous Windows
 os.environ.update(LABELQC_DB_PATH=f"{_tmp}/t.db", LABELQC_PDF_ROOT=f"{_tmp}/modeles",
                   LABELQC_ARCHIVE_PATH=f"{_tmp}/archives", LABELQC_OCR_LANGS="fra+eng", LABELQC_ADMIN_PASSWORD="motdepasse-test")
 

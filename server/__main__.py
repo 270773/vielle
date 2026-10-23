@@ -7,6 +7,9 @@ from . import auth, db
 
 
 def main(argv: list[str]) -> int:
+    for stream in (sys.stdout, sys.stderr):  # consoles Windows (cp850/cp1252) : ne jamais planter sur un accent
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     if argv[:1] == ["user"]:
         db.init()
         if argv[1:2] == ["add"] and len(argv) >= 5:
