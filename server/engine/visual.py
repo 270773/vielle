@@ -32,20 +32,21 @@ def align(recv: np.ndarray, model: np.ndarray, features=None) -> tuple[np.ndarra
 
 
 def _refine(warped: np.ndarray, model: np.ndarray, cover: np.ndarray):
-    """Affine le recalage au pixel pres (ECC) : indispensable pour comparer finement un scan."""
+    """Affine le recalage au pixel pres (ECC, transformation affine) ; ignore si la correlation ne progresse pas."""
     try:
         k = 0.35
-        a, b = (cv2.GaussianBlur(cv2.resize(cv2.cvtColor(i, cv2.COLOR_BGR2GRAY), None, fx=k, fy=k), (5, 5), 0)
-                for i in (warped, model))
-        m = np.eye(3, dtype=np.float32)
-        cc, m = cv2.findTransformECC(b, a, m, cv2.MOTION_HOMOGRAPHY, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 40, 1e-4), None, 5)
-        if cc < 0.5:
+        gray = lambda i: cv2.GaussianBlur(cv2.resize(cv2.cvtColor(i, cv2.COLOR_BGR2GRAY), None, fx=k, fy=k), (5, 5), 0)
+        a, b = gray(warped), gray(model)
+        m = np.eye(2, 3, dtype=np.float32)
+        cc, m = cv2.findTransformECC(b, a, m, cv2.MOTION_AFFINE, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 40, 1e-4), None, 5)
+        before = cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0, 0]
+        if cc < 0.5 or cc <= before + 0.002:
             return warped, cover
         S = np.diag([k, k, 1]).astype(np.float32)
-        full = np.linalg.inv(S) @ m @ S
+        full = (np.linalg.inv(S) @ np.vstack([m, [0, 0, 1]]).astype(np.float32) @ S)[:2]
         size, fl = (model.shape[1], model.shape[0]), cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
-        return (cv2.warpPerspective(warped, full, size, flags=fl, borderValue=(255, 255, 255)),
-                cv2.warpPerspective(cover, full, size, flags=fl))
+        return (cv2.warpAffine(warped, full, size, flags=fl, borderValue=(255, 255, 255)),
+                cv2.warpAffine(cover, full, size, flags=fl))
     except cv2.error:
         return warped, cover
 
@@ -108,6 +109,7 @@ def color_diff(model: np.ndarray, recv_aligned: np.ndarray, out: np.ndarray, thr
                     interpolation=cv2.INTER_LINEAR)
     mask = (de > threshold).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
+    _clear_border(mask)
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     H, W = mask.shape
     ecarts = []
@@ -142,6 +144,12 @@ def match_sharpness(model: np.ndarray, recv: np.ndarray) -> np.ndarray:
     return best
 
 
+def _clear_border(mask: np.ndarray, frac: float = 0.015) -> None:
+    """Le bord du scan (rognage, ombre, defaut de recalage) ne porte pas d'information fiable."""
+    b = int(max(mask.shape) * frac)
+    mask[:b, :] = 0; mask[-b:, :] = 0; mask[:, :b] = 0; mask[:, -b:] = 0
+
+
 def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.0004, tol: int = 8):
     """Retourne (ecarts, score SSIM, image annotee)."""
     g1, g2 = (cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in (model, recv_aligned))
@@ -154,6 +162,7 @@ def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.
     mask = cv2.bitwise_or(cv2.bitwise_and(b1, cv2.bitwise_not(cv2.dilate(b2, k))),
                           cv2.bitwise_and(b2, cv2.bitwise_not(cv2.dilate(b1, k))))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    _clear_border(mask)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     total = mask.shape[0] * mask.shape[1]

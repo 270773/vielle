@@ -17,13 +17,39 @@ def load_model(path: Path, dpi: int) -> np.ndarray:
         with pymupdf.open(path) as doc:
             has_trim = doc[0].trimbox != doc[0].mediabox
         # Sans TrimBox, un PDF d'imprimeur porte repères de coupe et ligne de slug : on ne garde que l'artwork.
-        return img if has_trim else crop_to_label(img, max_fraction=1.0, margin=0)
+        if has_trim:
+            return img
+        trimmed = trim_from_marks(img)
+        return trimmed if trimmed is not None else crop_to_label(img, max_fraction=1.0, margin=0)
     return decode_image(path.read_bytes())
 
 
 def _trim(page) -> "pymupdf.Rect":
     """Zone utile : TrimBox du PDF si presente (exclut reperes de coupe, fonds perdus et ligne de slug)."""
     return page.trimbox if page.trimbox != page.mediabox else page.rect
+
+
+def trim_from_marks(img: np.ndarray) -> np.ndarray | None:
+    """Detecte les reperes de coupe (traits fins hors de l'artwork) et rogne le fonds perdu."""
+    nonwhite = (img < 235).any(axis=2).astype(np.uint8)
+    n, _, st, _ = cv2.connectedComponentsWithStats(nonwhite, connectivity=8)
+    if n < 2:
+        return None
+    ax, ay, aw, ah, _ = st[max(range(1, n), key=lambda i: st[i, 4])]
+    xs, ys = [], []
+    for x, y, w, h, area in st[1:]:
+        if area < 8:
+            continue
+        if w <= 4 and h >= 12 and (y + h <= ay + 2 or y >= ay + ah - 2):  # trait vertical hors artwork : position x de coupe
+            xs.append(x + w / 2)
+        elif h <= 4 and w >= 12 and (x + w <= ax + 2 or x >= ax + aw - 2):
+            ys.append(y + h / 2)
+    if len(set(map(round, xs))) < 2 or len(set(map(round, ys))) < 2:
+        return None
+    x0, x1, y0, y1 = int(min(xs)), int(max(xs)) + 1, int(min(ys)), int(max(ys)) + 1
+    if (x1 - x0) < 0.7 * aw or (y1 - y0) < 0.7 * ah:  # incoherent avec l'artwork
+        return None
+    return img[y0:y1, x0:x1]
 
 
 def render_pdf(path: Path, dpi: int, page: int = 0) -> np.ndarray:

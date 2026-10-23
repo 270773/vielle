@@ -55,8 +55,8 @@ def text_regions(img: np.ndarray) -> list[dict]:
     return out
 
 
-def _local_diff(mg, rg, box, tol: int = 2) -> bool:
-    """Un glyphe change (chiffre, lettre, accent) ? Comparaison de l'encre a +-tol px pres dans la zone."""
+def _region_scores(mg, rg, box, tol: int = 3, margin: int = 10) -> tuple[float, float]:
+    """(part d'encre differente, correlation) d'une zone de texte entre le modele et l'etiquette."""
     x, y, w, h = box
     H, W = mg.shape
     sl = (slice(max(y - 3, 0), min(y + h + 3, H)), slice(max(x - 3, 0), min(x + w + 3, W)))
@@ -65,20 +65,33 @@ def _local_diff(mg, rg, box, tol: int = 2) -> bool:
     diff = cv2.bitwise_or(cv2.bitwise_and(ink[0], cv2.bitwise_not(cv2.dilate(ink[1], k))),
                           cv2.bitwise_and(ink[1], cv2.bitwise_not(cv2.dilate(ink[0], k))))
     diff = cv2.morphologyEx(diff, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
-    # Glyphe change : soit un bloc d'encre differente, soit une somme de petites differences dispersees.
-    n, _, stats, _ = cv2.connectedComponentsWithStats(diff)
-    biggest = max((stats[i, cv2.CC_STAT_AREA] for i in range(1, n)), default=0)
-    total = int(diff.sum() // 255)
-    return biggest >= max(12, 0.02 * h * h) or total >= max(60, 0.025 * int(ink[0].sum() // 255))
+    ratio = float(diff.sum()) / max(float(ink[0].sum()), 1.0)
+    x0, y0, x1, y1 = max(x - 2, 0), max(y - 2, 0), min(x + w + 2, W), min(y + h + 2, H)
+    tpl = mg[y0:y1, x0:x1]
+    zone = rg[max(y0 - margin, 0):min(y1 + margin, H), max(x0 - margin, 0):min(x1 + margin, W)]
+    if tpl.size == 0 or tpl.std() < 3 or zone.shape[0] < tpl.shape[0] or zone.shape[1] < tpl.shape[1]:
+        return ratio, 1.0
+    return ratio, float(cv2.matchTemplate(zone, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
-def compare_regions(model_regions, model_img, recv_img, thresh: float = 0.8) -> tuple[list[dict], float]:
-    """Verification sans OCR : chaque zone de texte du modele doit se retrouver a l'identique dans l'etiquette."""
+def compare_regions(model_regions, model_img, recv_img, k: float = 6.0) -> tuple[list[dict], float]:
+    """Verification sans OCR : chaque zone de texte du modele doit se retrouver a l'identique dans l'etiquette.
+
+    Une impression/un scan reels different toujours un peu du PDF (graisse, definition). Le seuil est donc
+    relatif : on mesure l'ecart habituel de CE scan sur l'ensemble des zones et on ne signale que les
+    zones qui s'en detachent nettement (mot modifie, absent, mal imprime)."""
+    if not model_regions:
+        return [], 1.0
     mg, rg = (cv2.createCLAHE(2.0, (8, 8)).apply(cv2.cvtColor(i, cv2.COLOR_BGR2GRAY)) for i in (model_img, recv_img))
+    sc = np.array([_region_scores(mg, rg, r["box"]) for r in model_regions])
+    ratio, ncc = sc[:, 0], sc[:, 1]
+    mad = lambda v: 1.4826 * float(np.median(np.abs(v - np.median(v))))
+    r_thr = max(0.05, float(np.median(ratio)) + k * mad(ratio))
+    n_thr = min(0.8, float(np.median(ncc)) - k * mad(ncc))
+    bad = (ratio > r_thr) | (ncc < n_thr)
     ecarts = [{"zone": "{},{},{},{}".format(*r["box"]), "type_ecart": "zone_texte_differente", "criticite": 2,
-               "valeur_attendue": "", "valeur_trouvee": ""}
-              for r in model_regions if not _present(mg, rg, r["box"], thresh=thresh) or _local_diff(mg, rg, r["box"])]
-    return ecarts, 1 - len(ecarts) / len(model_regions) if model_regions else 1.0
+               "valeur_attendue": "", "valeur_trouvee": ""} for r, b in zip(model_regions, bad) if b]
+    return ecarts, 1 - len(ecarts) / len(model_regions)
 
 
 def ocr_words(img: np.ndarray, langs: str | None = None, min_conf: int = 60) -> list[dict]:
