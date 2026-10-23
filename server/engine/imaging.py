@@ -13,7 +13,11 @@ MODEL_EXT = {".pdf"} | IMAGE_EXT
 def load_model(path: Path, dpi: int) -> np.ndarray:
     """Modele de reference : PDF (rendu a `dpi`) ou image (BMP, PNG, JPEG, TIFF)."""
     if path.suffix.lower() == ".pdf":
-        return render_pdf(path, dpi)
+        img = render_pdf(path, dpi)
+        with pymupdf.open(path) as doc:
+            has_trim = doc[0].trimbox != doc[0].mediabox
+        # Sans TrimBox, un PDF d'imprimeur porte repères de coupe et ligne de slug : on ne garde que l'artwork.
+        return img if has_trim else crop_to_label(img, max_fraction=1.0, margin=0)
     return decode_image(path.read_bytes())
 
 
@@ -48,7 +52,7 @@ def decode_image(data: bytes) -> np.ndarray:
     return img
 
 
-def crop_to_label(img: np.ndarray, min_fraction: float = 0.04) -> np.ndarray:
+def crop_to_label(img: np.ndarray, min_fraction: float = 0.04, max_fraction: float = 0.9, margin: int = 12) -> np.ndarray:
     """Scan A4 : isole l'etiquette (tout ce qui differe du fond de la vitre/du capot)."""
     h, w = img.shape[:2]
     small = cv2.resize(img, None, fx=800 / max(h, w), fy=800 / max(h, w), interpolation=cv2.INTER_AREA)
@@ -64,9 +68,9 @@ def crop_to_label(img: np.ndarray, min_fraction: float = 0.04) -> np.ndarray:
         return img
     x, y, bw, bh = cv2.boundingRect(np.concatenate(cnts))
     frac = bw * bh / (small.shape[0] * small.shape[1])
-    if frac < min_fraction or frac > 0.9:  # rien de net, ou l'image est deja cadree sur l'etiquette
+    if frac < min_fraction or frac > max_fraction:  # rien de net, ou l'image est deja cadree sur l'etiquette
         return img
-    k, m = w / small.shape[1], 12
+    k, m = w / small.shape[1], margin
     x0, y0 = max(int((x - m) * k), 0), max(int((y - m) * k), 0)
     return img[y0:min(int((y + bh + m) * k), h), x0:min(int((x + bw + m) * k), w)]
 

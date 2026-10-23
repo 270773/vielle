@@ -13,9 +13,14 @@ def read(img: np.ndarray) -> list[tuple[str, str]]:
     return sorted(found)
 
 
-def compare(model_img: np.ndarray, recv_img: np.ndarray, *extra: np.ndarray) -> tuple[list[dict], dict]:
+def compare(model_img: np.ndarray, recv_img: np.ndarray, *extra: np.ndarray, expected=None) -> tuple[list[dict], dict]:
     # `extra` : images supplementaires (photo originale, pleine resolution) pour fiabiliser la lecture
-    exp, got = read(model_img), sorted(set(read(recv_img)).union(*(read(i) for i in extra)))
+    exp = read(model_img) if expected is None else expected
+    got = set(read(recv_img))
+    if not set(exp) <= got:  # lecture plus couteuse (photo d'origine, pleine resolution) seulement si necessaire
+        for img in extra:
+            got |= set(read(img))
+    got = sorted(got)
     ecarts = []
     for t, v in exp:
         if (t, v) not in got:

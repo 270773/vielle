@@ -47,6 +47,10 @@ def text_regions(img: np.ndarray) -> list[dict]:
         x, y, w, h = cv2.boundingRect(c)
         if h < 10 or w < 10 or h > 150 or w > 700:  # bruit, ou grande zone (photo) traitee par la comparaison de formes
             continue
+        # Fond non uniforme (photo) : la verification est confiee aux comparaisons de formes et de couleurs.
+        bg = gray[y:y + h, x:x + w][ink[y:y + h, x:x + w] == 0]
+        if bg.size and float(np.percentile(bg, 75) - np.percentile(bg, 25)) > 20:
+            continue
         out.append({"text": "", "conf": 100.0, "box": (x, y, w, h)})
     return out
 
