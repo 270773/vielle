@@ -11,7 +11,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS utilisateurs(id INTEGER PRIMARY KEY, login_ad TEXT UNIQUE, nom TEXT, prenom TEXT,
   role TEXT, actif INTEGER DEFAULT 1, date_creation TEXT);
 CREATE TABLE IF NOT EXISTS modeles_pdf(id INTEGER PRIMARY KEY, ref_produit TEXT, fournisseur TEXT, langue TEXT,
-  version TEXT, date_validation TEXT, chemin_reseau TEXT UNIQUE, hash_md5 TEXT);
+  version TEXT, date_validation TEXT, chemin_reseau TEXT UNIQUE, hash_md5 TEXT, langues_ocr TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS controles(id INTEGER PRIMARY KEY, date_heure TEXT, utilisateur_id TEXT,
   modele_id INTEGER REFERENCES modeles_pdf(id), image_path TEXT, overlay_path TEXT, statut TEXT,
   score_global REAL, detail_json TEXT);
@@ -47,6 +47,8 @@ def conn():
 def init() -> None:
     with conn() as c:
         c.executescript(SCHEMA)
+        if "langues_ocr" not in [r["name"] for r in c.execute("PRAGMA table_info(modeles_pdf)")]:
+            c.execute("ALTER TABLE modeles_pdf ADD COLUMN langues_ocr TEXT DEFAULT ''")
 
 
 def audit(c, user: str, action: str, details: str = "", ip: str = "") -> None:
@@ -66,10 +68,15 @@ def sync_models() -> int:
         for pdf in sorted(p for p in config.PDF_ROOT.glob("*/*/*/modele.*") if p.suffix.lower() in MODEL_EXT):
             fournisseur, ref, version = pdf.parts[-4:-1]
             md5 = hashlib.md5(pdf.read_bytes()).hexdigest()
+            side = pdf.with_name("modele.json")  # {"langue": "tr", "langues_etiquette": ["tr", "ar", "en"]}
+            meta = json.loads(side.read_text(encoding="utf-8")) if side.exists() else {}
+            langue = meta.get("langue", "fr")
+            ocr = ",".join(meta.get("langues_etiquette", [langue, "en"]))
             row = c.execute("SELECT id, hash_md5 FROM modeles_pdf WHERE chemin_reseau=?", (str(pdf),)).fetchone()
             if row is None:
                 c.execute("INSERT INTO modeles_pdf(ref_produit,fournisseur,langue,version,date_validation,chemin_reseau,hash_md5)"
-                          " VALUES(?,?,?,?,?,?,?)", (ref, fournisseur, "fr", version, now(), str(pdf), md5))
+                          " VALUES(?,?,?,?,?,?,?)", (ref, fournisseur, langue, version, now(), str(pdf), md5))
+                c.execute("UPDATE modeles_pdf SET langues_ocr=? WHERE chemin_reseau=?", (ocr, str(pdf)))
                 n += 1
             elif row["hash_md5"] != md5:
                 c.execute("UPDATE modeles_pdf SET hash_md5=? WHERE id=?", (md5, row["id"]))

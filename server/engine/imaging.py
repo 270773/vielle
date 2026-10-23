@@ -38,10 +38,37 @@ def pdf_text(path: Path, page: int = 0) -> str:
 
 
 def decode_image(data: bytes) -> np.ndarray:
+    if data[:5] == b"%PDF-":  # scan enregistre en PDF par le scanner : 1re page
+        with pymupdf.open(stream=data, filetype="pdf") as doc:
+            pix = doc[0].get_pixmap(dpi=300, alpha=False)
+            return cv2.cvtColor(np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n), cv2.COLOR_RGB2BGR)
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("Image illisible (formats acceptes : PNG, JPEG, TIFF, BMP)")
     return img
+
+
+def crop_to_label(img: np.ndarray, min_fraction: float = 0.04) -> np.ndarray:
+    """Scan A4 : isole l'etiquette (tout ce qui differe du fond de la vitre/du capot)."""
+    h, w = img.shape[:2]
+    small = cv2.resize(img, None, fx=800 / max(h, w), fy=800 / max(h, w), interpolation=cv2.INTER_AREA)
+    border = np.concatenate([small[:5].reshape(-1, 3), small[-5:].reshape(-1, 3),
+                             small[:, :5].reshape(-1, 3), small[:, -5:].reshape(-1, 3)])
+    bg = np.median(border, axis=0)
+    mask = (np.abs(small.astype(int) - bg).max(axis=2) > 28).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)))
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # union de tous les blocs significatifs (une etiquette est faite de plusieurs elements disjoints)
+    cnts = [c for c in cnts if cv2.contourArea(c) > 0.0005 * mask.size]
+    if not cnts:
+        return img
+    x, y, bw, bh = cv2.boundingRect(np.concatenate(cnts))
+    frac = bw * bh / (small.shape[0] * small.shape[1])
+    if frac < min_fraction or frac > 0.9:  # rien de net, ou l'image est deja cadree sur l'etiquette
+        return img
+    k, m = w / small.shape[1], 12
+    x0, y0 = max(int((x - m) * k), 0), max(int((y - m) * k), 0)
+    return img[y0:min(int((y + bh + m) * k), h), x0:min(int((x + bw + m) * k), w)]
 
 
 def _deskew(gray: np.ndarray) -> float:
@@ -57,6 +84,7 @@ def _deskew(gray: np.ndarray) -> float:
 
 def normalize_received(img: np.ndarray, target_long_side: int) -> np.ndarray:
     """Redresse legerement et met a l'echelle (cote long = celui du modele)."""
+    img = crop_to_label(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     angle = _deskew(gray)
     if abs(angle) > 0.3:

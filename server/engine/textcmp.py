@@ -13,6 +13,29 @@ from .. import config
 _CRITICAL = re.compile(r"\b(?:H\d{3}[A-Za-z]*|P\d{3}|EUH\d{3}|DANGER|ATTENTION|UN\s?\d{4}|CAS|\d+[.,]?\d*\s?(?:%|ml|l|g|kg|mg))\b", re.I)
 
 
+# Code ISO 639-1 -> pack Tesseract (les langues d'un meme alphabet partagent souvent un pack).
+ISO_TO_TESS = {"fr": "fra", "en": "eng", "de": "deu", "es": "spa", "it": "ita", "pt": "por", "nl": "nld", "pl": "pol",
+               "tr": "tur", "ru": "rus", "uk": "ukr", "el": "ell", "ar": "ara", "fa": "fas", "he": "heb", "hi": "hin",
+               "th": "tha", "vi": "vie", "id": "ind", "ms": "msa", "ja": "jpn", "ko": "kor", "zh": "chi_sim",
+               "zh-tw": "chi_tra", "cs": "ces", "sv": "swe", "da": "dan", "no": "nor", "fi": "fin", "ro": "ron",
+               "hu": "hun", "bg": "bul"}
+
+
+def installed_langs() -> list[str]:
+    return sorted(l for l in pytesseract.get_languages(config="") if l != "osd")
+
+
+def ocr_langs_for(codes: str) -> str:
+    """'tr,en' -> 'tur+eng'. Les packs non installes sont ignores (et signales par l'API /api/langues)."""
+    have = set(installed_langs())
+    out = []
+    for c in (x.strip().lower() for x in codes.replace("+", ",").split(",") if x.strip()):
+        t = ISO_TO_TESS.get(c, c)
+        if t in have and t not in out:
+            out.append(t)
+    return "+".join(out) or config.OCR_LANGS
+
+
 def ocr_words(img: np.ndarray, langs: str | None = None, min_conf: int = 60) -> list[dict]:
     """Mots fiables avec leur boite (x, y, w, h) ; l'image est supposee deja a l'echelle de travail."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

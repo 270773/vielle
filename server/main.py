@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, db, report
-from .engine import imaging, pipeline
+from .engine import imaging, pipeline, textcmp
 
 app = FastAPI(title="LabelQC")
 STATIC = Path(__file__).parent / "static"
@@ -19,6 +19,7 @@ STATIC = Path(__file__).parent / "static"
 def startup() -> None:
     config.PDF_ROOT.mkdir(parents=True, exist_ok=True)
     config.ARCHIVE_PATH.mkdir(parents=True, exist_ok=True)
+    config.SCAN_INBOX.mkdir(parents=True, exist_ok=True)
     db.init()
     db.sync_models()
 
@@ -37,6 +38,12 @@ def modeles():
             "ORDER BY fournisseur, ref_produit, version")]
 
 
+@app.get("/api/langues")
+def langues():
+    """Packs de langues OCR installes sur le serveur."""
+    return textcmp.installed_langs()
+
+
 @app.get("/api/modeles/{mid}/pdf")
 def modele_pdf(mid: int):
     with db.conn() as c:
@@ -46,19 +53,55 @@ def modele_pdf(mid: int):
     return FileResponse(r["chemin_reseau"])
 
 
+SCAN_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".pdf"}
+
+
+@app.get("/api/scans")
+def scans_entrants():
+    """Scans deposes par le scanner dans le dossier d'entree, du plus recent au plus ancien."""
+    files = [f for f in config.SCAN_INBOX.iterdir() if f.is_file() and f.suffix.lower() in SCAN_EXT]
+    return [{"nom": f.name, "taille": f.stat().st_size, "date": f.stat().st_mtime}
+            for f in sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)]
+
+
+@app.get("/api/scans/{nom}")
+def scan_apercu(nom: str):
+    f = _scan_path(nom)
+    return Response(cv2.imencode(".jpg", _small(imaging.decode_image(f.read_bytes())))[1].tobytes(), media_type="image/jpeg")
+
+
+def _small(img, side: int = 900):
+    k = side / max(img.shape[:2])
+    return cv2.resize(img, None, fx=k, fy=k, interpolation=cv2.INTER_AREA) if k < 1 else img
+
+
+def _scan_path(nom: str) -> Path:
+    f = (config.SCAN_INBOX / nom).resolve()
+    if f.parent != config.SCAN_INBOX.resolve() or not f.is_file() or f.suffix.lower() not in SCAN_EXT:
+        raise HTTPException(404, "Scan introuvable")
+    return f
+
+
 @app.post("/api/controles")
 async def creer_controle(request: Request, modele_id: int = Form(...), langue_etiquette: str = Form(""),
-                         image: UploadFile = File(...), x_user: str = Header("anonyme")):
+                         image: UploadFile | None = File(None), scan: str = Form(""), x_user: str = Header("anonyme")):
     with db.conn() as c:
         m = c.execute("SELECT * FROM modeles_pdf WHERE id=?", (modele_id,)).fetchone()
     if not m:
         raise HTTPException(404, "Modele inconnu")
-    data = await image.read()
+    if scan:
+        scan_file = _scan_path(scan)
+        data = scan_file.read_bytes()
+    elif image is not None:
+        scan_file, data = None, await image.read()
+    else:
+        raise HTTPException(400, "Fournir un scan du dossier d'entree ou une image")
     try:
         img = imaging.decode_image(data)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    res = pipeline.run(Path(m["chemin_reseau"]), img, model_lang=m["langue"], label_lang=langue_etiquette or None)
+    res = pipeline.run(Path(m["chemin_reseau"]), img,
+                       langs=textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]), model_lang=m["langue"], label_lang=langue_etiquette or None)
 
     with db.conn() as c:
         cur = c.execute("INSERT INTO controles(date_heure,utilisateur_id,modele_id,statut,score_global,detail_json)"
@@ -76,6 +119,9 @@ async def creer_controle(request: Request, modele_id: int = Form(...), langue_et
             c.execute("INSERT INTO ecarts(controle_id,zone,type_ecart,criticite,valeur_attendue,valeur_trouvee)"
                       " VALUES(?,?,?,?,?,?)", (cid, e["zone"], e["type_ecart"], e["criticite"],
                                                e["valeur_attendue"], e["valeur_trouvee"]))
+        if scan_file:  # le scan est traite : on le range avec le controle pour qu'il ne soit pas reutilise
+            (folder / f"scan_origine{scan_file.suffix.lower()}").write_bytes(data)
+            scan_file.unlink()
         db.audit(c, x_user, "controle", f"id={cid} modele={modele_id} statut={res.statut}",
                  request.client.host if request.client else "")
     return _controle(cid)

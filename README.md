@@ -24,6 +24,20 @@ uvicorn server.main:app --host 0.0.0.0 --port 8000
 pytest
 ```
 
+## Scan de l'étiquette reçue (méthode recommandée)
+
+- Régler le scanner en « scan vers dossier » (PNG, JPEG, TIFF ou PDF, 300–600 dpi, couleur) vers `LABELQC_SCAN_INBOX`
+  (`data/scans_entrants`). `GET /api/scans` liste les scans ; `POST /api/controles` accepte `scan=<nom>` : le scan est
+  analysé puis rangé avec le contrôle. Une étiquette posée au milieu d'une feuille A4 est détourée automatiquement.
+- Les images peuvent aussi être envoyées directement (`image=`), y compris des photos.
+
+## Langues
+
+L'OCR et la comparaison fonctionnent dans toutes les langues dont le pack Tesseract est installé (`GET /api/langues`).
+Un fichier optionnel `modele.json` à côté du modèle précise les langues imprimées :
+`{"langue": "tr", "langues_etiquette": ["tr", "ar", "en"]}`. La comparaison mot à mot s'appuie sur l'image de chaque mot,
+donc elle reste valable pour les écritures non latines (arabe, cyrillique, CJK…) tant que l'OCR les localise.
+
 ## Écart avec le dossier technique (à décider)
 
 Cette version est un socle exécutable : SQLite à la place de SQL Server, en-tête `X-User` à la place d'Active Directory/JWT,

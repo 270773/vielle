@@ -73,3 +73,37 @@ def test_modele_image_et_etiquette_tournee(models, tmp_path):
     assert r.aligne
     assert r.codes["recu"] == r.codes["modele"] != []
     assert not [e for e in r.ecarts if e["criticite"] >= 2], r.ecarts
+
+
+def _a4_scan(label, tmp_path, dpi_scale=1.0, rot=1.0):
+    """Etiquette posee de travers sur une feuille A4 a 200 dpi (fond blanc cote vitre)."""
+    canvas = np.full((2339, 1654, 3), 245, np.uint8)
+    lab = cv2.resize(label, None, fx=dpi_scale, fy=dpi_scale)
+    h, w = lab.shape[:2]
+    canvas[300:300 + h, 250:250 + w] = lab
+    return cv2.warpAffine(canvas, cv2.getRotationMatrix2D((827, 1170), rot, 1), (1654, 2339), borderValue=(245, 245, 245))
+
+
+def test_scan_a4_etiquette_au_milieu(models, tmp_path):
+    pdf = models / "Acme" / "REF001" / "1" / "modele.pdf"
+    scan = _a4_scan(scan_of(pdf, tmp_path), tmp_path)
+    r = pipeline.run(pdf, scan)
+    assert r.aligne and r.codes["recu"] == r.codes["modele"] != []
+    assert not [e for e in r.ecarts if e["criticite"] >= 2], r.ecarts
+
+
+def test_scan_depose_dans_le_dossier_d_entree(models, tmp_path):
+    from server.main import app
+    bad = tmp_path / "bad.pdf"
+    make_label_pdf(bad, h_code="H226")
+    png = cv2.imencode(".png", _a4_scan(scan_of(bad, tmp_path), tmp_path))[1].tobytes()
+    (config.SCAN_INBOX).mkdir(parents=True, exist_ok=True)
+    (config.SCAN_INBOX / "scan001.png").write_bytes(png)
+    (config.SCAN_INBOX / "note.txt").write_text("ignore")
+    with TestClient(app) as c:
+        assert [s["nom"] for s in c.get("/api/scans").json()] == ["scan001.png"]
+        assert c.get("/api/scans/..%2Fconfig.py").status_code == 404
+        mid = c.get("/api/modeles").json()[0]["id"]
+        r = c.post("/api/controles", data={"modele_id": mid, "scan": "scan001.png"})
+        assert r.status_code == 200 and r.json()["statut"] == "NON_CONFORME"
+        assert c.get("/api/scans").json() == []

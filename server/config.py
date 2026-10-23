@@ -29,3 +29,4 @@ OCR_LANGS = os.environ.get("LABELQC_OCR_LANGS", "tur+fra+eng")
 LIBRETRANSLATE_URL = os.environ.get("LABELQC_LIBRETRANSLATE_URL", "").strip()
 RENDER_DPI = int(os.environ.get("LABELQC_RENDER_DPI", "300"))
 WORK_SIZE = int(os.environ.get("LABELQC_WORK_SIZE", "2000"))
+SCAN_INBOX = _path("LABELQC_SCAN_INBOX", "data/scans_entrants")  # dossier de destination "scan vers dossier" du scanner
