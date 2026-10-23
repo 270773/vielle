@@ -25,6 +25,7 @@ def _path(name: str, default: str) -> Path:
 DB_PATH = _path("LABELQC_DB_PATH", "data/labelqc.db")
 PDF_ROOT = _path("LABELQC_PDF_ROOT", "data/modeles")
 ARCHIVE_PATH = _path("LABELQC_ARCHIVE_PATH", "data/archives")
-OCR_LANGS = os.environ.get("LABELQC_OCR_LANGS", "fra+eng")
+OCR_LANGS = os.environ.get("LABELQC_OCR_LANGS", "tur+fra+eng")
 LIBRETRANSLATE_URL = os.environ.get("LABELQC_LIBRETRANSLATE_URL", "").strip()
 RENDER_DPI = int(os.environ.get("LABELQC_RENDER_DPI", "300"))
+WORK_SIZE = int(os.environ.get("LABELQC_WORK_SIZE", "2000"))

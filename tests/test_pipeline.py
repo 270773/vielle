@@ -62,3 +62,14 @@ def test_api_flux_complet(models, tmp_path):
         assert c.get(f"/api/controles/{cid}/rapport").content.startswith(b"%PDF")
         assert c.get(f"/api/controles/{cid}/image").status_code == 200
         assert c.post("/api/controles", data={"modele_id": mid}, files={"image": ("x.png", b"nope", "image/png")}).status_code == 400
+
+
+def test_modele_image_et_etiquette_tournee(models, tmp_path):
+    pdf = models / "Acme" / "REF001" / "1" / "modele.pdf"
+    model_png = tmp_path / "modele.png"
+    cv2.imwrite(str(model_png), imaging.render_pdf(pdf, 150))
+    scan = cv2.rotate(scan_of(pdf, tmp_path), cv2.ROTATE_90_CLOCKWISE)
+    r = pipeline.run(model_png, scan)
+    assert r.aligne
+    assert r.codes["recu"] == r.codes["modele"] != []
+    assert not [e for e in r.ecarts if e["criticite"] >= 2], r.ecarts

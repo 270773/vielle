@@ -5,7 +5,7 @@ avec un modèle PDF de référence. Voir le dossier technique `DT-LABELQC-2026-0
 
 ## Ce que fait cette première version
 
-- **Modèles** : PDF rangés en `data/modeles/{Fournisseur}/{Reference}/{Version}/modele.pdf`, indexés automatiquement (MD5).
+- **Modèles** : PDF ou image (BMP, PNG, JPEG) rangés en `data/modeles/{Fournisseur}/{Reference}/{Version}/modele.pdf` (ou `modele.bmp`, `.png`, `.jpg`), indexés automatiquement (MD5).
 - **Pipeline** : redressement → recalage (ORB + homographie) → OCR Tesseract → comparaison mot à mot
   (codes H/P/EUH, chiffres, DANGER/ATTENTION = criticité 3) → lecture/comparaison codes-barres & QR (ZBar)
   → comparaison visuelle tolérante au décalage → score et statut `CONFORME` / `A_REVOIR` / `NON_CONFORME`.

@@ -43,7 +43,7 @@ def modele_pdf(mid: int):
         r = c.execute("SELECT chemin_reseau FROM modeles_pdf WHERE id=?", (mid,)).fetchone()
     if not r:
         raise HTTPException(404, "Modele inconnu")
-    return FileResponse(r["chemin_reseau"], media_type="application/pdf")
+    return FileResponse(r["chemin_reseau"])
 
 
 @app.post("/api/controles")

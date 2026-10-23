@@ -62,7 +62,8 @@ def sync_models() -> int:
     """Indexe {Fournisseur}/{Reference}/{Version}/modele.pdf depuis PDF_ROOT."""
     n = 0
     with conn() as c:
-        for pdf in sorted(config.PDF_ROOT.glob("*/*/*/modele.pdf")):
+        from .engine.imaging import MODEL_EXT
+        for pdf in sorted(p for p in config.PDF_ROOT.glob("*/*/*/modele.*") if p.suffix.lower() in MODEL_EXT):
             fournisseur, ref, version = pdf.parts[-4:-1]
             md5 = hashlib.md5(pdf.read_bytes()).hexdigest()
             row = c.execute("SELECT id, hash_md5 FROM modeles_pdf WHERE chemin_reseau=?", (str(pdf),)).fetchone()

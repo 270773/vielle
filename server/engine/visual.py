@@ -22,7 +22,16 @@ def align(recv: np.ndarray, model: np.ndarray) -> tuple[np.ndarray, bool]:
     return cv2.resize(recv, (w, h), interpolation=cv2.INTER_AREA), False
 
 
-def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.0004, tol: int = 6):
+def match_colors(recv: np.ndarray, model: np.ndarray) -> np.ndarray:
+    """Compense l'eclairage : ramene moyenne/ecart-type LAB de la photo sur ceux du modele."""
+    a, b = (cv2.cvtColor(i, cv2.COLOR_BGR2LAB).astype(np.float32) for i in (recv, model))
+    for ch in range(3):
+        sa, sb = a[..., ch].std() or 1, b[..., ch].std()
+        a[..., ch] = (a[..., ch] - a[..., ch].mean()) * (sb / sa) + b[..., ch].mean()
+    return cv2.cvtColor(np.clip(a, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
+def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.0004, tol: int = 8):
     """Retourne (ecarts, score SSIM, image annotee)."""
     g1, g2 = (cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in (model, recv_aligned))
     score = float(structural_similarity(cv2.GaussianBlur(g1, (5, 5), 0), cv2.GaussianBlur(g2, (5, 5), 0)))
@@ -33,7 +42,7 @@ def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.
     mask = cv2.bitwise_or(cv2.bitwise_and(b1, cv2.bitwise_not(cv2.dilate(b2, k))),
                           cv2.bitwise_and(b2, cv2.bitwise_not(cv2.dilate(b1, k))))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     total = mask.shape[0] * mask.shape[1]
     out = recv_aligned.copy()
@@ -43,7 +52,11 @@ def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.
         ratio = w * h / total
         if ratio < min_area_ratio:
             continue
-        crit = 3 if ratio > 0.02 else 2 if ratio > 0.004 else 1
+        H, W = mask.shape
+        edge = x < 20 or y < 20 or x + w > W - 20 or y + h > H - 20
+        if (edge and min(w, h) < 60) or (max(w, h) > 6 * min(w, h) and min(w, h) < 20):
+            continue  # liseres de bord de feuille / traits fins : artefacts de prise de vue
+        crit = 3 if ratio > 0.03 else 2 if ratio > 0.008 else 1
         cv2.rectangle(out, (x, y), (x + w, y + h), (0, 0, 255), 4)
         ecarts.append({"zone": f"{x},{y},{w},{h}", "type_ecart": "ecart_visuel", "criticite": crit,
                        "valeur_attendue": "conforme au modele",

@@ -6,6 +6,17 @@ import numpy as np
 import pymupdf
 
 
+IMAGE_EXT = {".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff"}
+MODEL_EXT = {".pdf"} | IMAGE_EXT
+
+
+def load_model(path: Path, dpi: int) -> np.ndarray:
+    """Modele de reference : PDF (rendu a `dpi`) ou image (BMP, PNG, JPEG, TIFF)."""
+    if path.suffix.lower() == ".pdf":
+        return render_pdf(path, dpi)
+    return decode_image(path.read_bytes())
+
+
 def render_pdf(path: Path, dpi: int, page: int = 0) -> np.ndarray:
     with pymupdf.open(path) as doc:
         pix = doc[page].get_pixmap(dpi=dpi, alpha=False)
@@ -14,7 +25,9 @@ def render_pdf(path: Path, dpi: int, page: int = 0) -> np.ndarray:
 
 
 def pdf_text(path: Path, page: int = 0) -> str:
-    """Texte natif du PDF (vide si le PDF est une image)."""
+    """Texte natif du PDF (vide si le PDF est une image ou si le modele est une image)."""
+    if path.suffix.lower() != ".pdf":
+        return ""
     with pymupdf.open(path) as doc:
         return doc[page].get_text("text")
 
