@@ -1,19 +1,34 @@
 """API LabelQC (FastAPI)."""
 import hashlib
+import threading
 from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response as _R, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, identify, report
+from . import auth, config, db, identify, report
 from .engine import imaging, pipeline, textcmp
 
 app = FastAPI(title="LabelQC")
 STATIC = Path(__file__).parent / "static"
+
+
+def _warm_up() -> None:
+    """Calcule a l'avance l'empreinte de chaque modele : le premier controle n'attend plus."""
+    try:
+        db.sync_models()
+        with db.conn() as c:
+            paths = [Path(r["chemin_reseau"]) for r in c.execute("SELECT chemin_reseau FROM modeles_pdf")]
+        for p in paths:
+            identify._model_signature(str(p), p.stat().st_mtime_ns)
+            pipeline._model_bundle(str(p), p.stat().st_mtime_ns)
+    except Exception as e:  # ne jamais empecher le demarrage
+        print(f"[LabelQC] prechauffage incomplet : {e}", flush=True)
 
 
 @app.on_event("startup")
@@ -22,7 +37,38 @@ def startup() -> None:
     config.ARCHIVE_PATH.mkdir(parents=True, exist_ok=True)
     config.SCAN_INBOX.mkdir(parents=True, exist_ok=True)
     db.init()
+    threading.Thread(target=_warm_up, daemon=True).start()  # prepare les modeles pendant que l'utilisateur se connecte
+    pwd = auth.ensure_admin()
+    if pwd:
+        print(f"[LabelQC] Compte initial cree : admin / {pwd}  (a changer : python -m server user add admin <mdp> admin)", flush=True)
     db.sync_models()
+
+
+class Login(BaseModel):
+    login: str
+    password: str
+
+
+@app.post("/api/login")
+def login(d: Login, request: Request, response: Response):
+    user = auth.verify_login(d.login, d.password)
+    with db.conn() as c:
+        db.audit(c, d.login, "connexion" if user else "echec_connexion", "", request.client.host if request.client else "")
+    if not user:
+        raise HTTPException(401, "Identifiant ou mot de passe incorrect")
+    response.set_cookie(auth.COOKIE, auth.make_token(user), max_age=auth.SESSION_SECONDS, httponly=True, samesite="strict")
+    return user
+
+
+@app.post("/api/logout")
+def logout(response: Response):
+    response.delete_cookie(auth.COOKIE)
+    return {"ok": True}
+
+
+@app.get("/api/moi")
+def moi(user: dict = Depends(auth.current_user)):
+    return user
 
 
 @app.get("/health")
@@ -31,7 +77,7 @@ def health():
 
 
 @app.get("/api/modeles")
-def modeles(q: str = ""):
+def modeles(q: str = "", user: dict = Depends(auth.current_user)):
     """Modeles indexes ; `q` filtre sur le nom du produit ou le code d'etiquette."""
     db.sync_models()
     with db.conn() as c:
@@ -43,19 +89,20 @@ def modeles(q: str = ""):
 
 
 @app.post("/api/identifier")
-async def identifier(image: UploadFile | None = File(None), scan: str = Form(""), q: str = Form("")):
+async def identifier(image: UploadFile | None = File(None), scan: str = Form(""), q: str = Form(""),
+                     user: dict = Depends(auth.current_user)):
     """Propose les modeles correspondant a l'etiquette (code-barres + ressemblance visuelle)."""
-    return identify.identify(await _read_input(image, scan), q)
+    return await run_in_threadpool(identify.identify, await _read_input(image, scan), q)
 
 
 @app.get("/api/langues")
-def langues():
+def langues(user: dict = Depends(auth.current_user)):
     """Packs de langues OCR installes sur le serveur."""
     return textcmp.installed_langs()
 
 
 @app.get("/api/modeles/{mid}/pdf")
-def modele_pdf(mid: int):
+def modele_pdf(mid: int, user: dict = Depends(auth.current_user)):
     with db.conn() as c:
         r = c.execute("SELECT chemin_reseau FROM modeles_pdf WHERE id=?", (mid,)).fetchone()
     if not r:
@@ -63,11 +110,12 @@ def modele_pdf(mid: int):
     return FileResponse(r["chemin_reseau"])
 
 
+MAX_UPLOAD = 80 * 1024 * 1024
 SCAN_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".pdf"}
 
 
 @app.get("/api/scans")
-def scans_entrants():
+def scans_entrants(user: dict = Depends(auth.current_user)):
     """Scans deposes par le scanner dans le dossier d'entree, du plus recent au plus ancien."""
     files = [f for f in config.SCAN_INBOX.iterdir() if f.is_file() and f.suffix.lower() in SCAN_EXT]
     return [{"nom": f.name, "taille": f.stat().st_size, "date": f.stat().st_mtime}
@@ -75,7 +123,7 @@ def scans_entrants():
 
 
 @app.get("/api/scans/{nom}")
-def scan_apercu(nom: str):
+def scan_apercu(nom: str, user: dict = Depends(auth.current_user)):
     f = _scan_path(nom)
     return Response(cv2.imencode(".jpg", _small(imaging.decode_image(f.read_bytes())))[1].tobytes(), media_type="image/jpeg")
 
@@ -108,10 +156,12 @@ def _scan_path(nom: str) -> Path:
 @app.post("/api/controles")
 async def creer_controle(request: Request, modele_id: int | None = Form(None), langue_etiquette: str = Form(""),
                          image: UploadFile | None = File(None), scan: str = Form(""), q: str = Form(""),
-                         x_user: str = Header("anonyme")):
+                         user: dict = Depends(auth.current_user)):
     """Controle d'une etiquette. Sans `modele_id`, le modele est detecte automatiquement (`q` = nom/code optionnel)."""
     scan_file = _scan_path(scan) if scan else None
     data = scan_file.read_bytes() if scan_file else (await image.read() if image is not None else b"")
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "Fichier trop volumineux (80 Mo maximum)")
     if not data:
         raise HTTPException(400, "Fournir un scan du dossier d'entree ou une image")
     try:
@@ -119,7 +169,7 @@ async def creer_controle(request: Request, modele_id: int | None = Form(None), l
     except ValueError as e:
         raise HTTPException(400, str(e))
     if modele_id is None:
-        found = identify.identify(img, q)
+        found = await run_in_threadpool(identify.identify, img, q)
         if not found["sur"]:
             raise HTTPException(409, detail={"message": "Modele non identifie avec certitude : choisir un candidat",
                                              "candidats": found["candidats"]})
@@ -128,12 +178,15 @@ async def creer_controle(request: Request, modele_id: int | None = Form(None), l
         m = c.execute("SELECT * FROM modeles_pdf WHERE id=?", (modele_id,)).fetchone()
     if not m:
         raise HTTPException(404, "Modele inconnu")
-    res = pipeline.run(Path(m["chemin_reseau"]), img,
-                       langs=textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]) if config.USE_OCR else None, model_lang=m["langue"], label_lang=langue_etiquette or None)
+    langs = textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]) if config.USE_OCR else None
+    try:
+        res = await run_in_threadpool(pipeline.run, Path(m["chemin_reseau"]), img, langs, m["langue"], langue_etiquette or None)
+    except Exception as e:  # modele illisible, image degeneree... : message exploitable plutot qu'une erreur 500 muette
+        raise HTTPException(422, f"Analyse impossible : {e}")
 
     with db.conn() as c:
         cur = c.execute("INSERT INTO controles(date_heure,utilisateur_id,modele_id,statut,score_global,detail_json)"
-                        " VALUES(?,?,?,?,?,?)", (db.now(), x_user, modele_id, res.statut, res.score_global,
+                        " VALUES(?,?,?,?,?,?)", (db.now(), user["login"], modele_id, res.statut, res.score_global,
                                                  db.dumps({"codes": res.codes, "scores": res.scores, "aligne": res.aligne,
                                                            "texte_modele": res.texte_modele, "texte_recu": res.texte_recu})))
         cid = cur.lastrowid
@@ -152,7 +205,7 @@ async def creer_controle(request: Request, modele_id: int | None = Form(None), l
         if scan_file:  # le scan est traite : on le range avec le controle pour qu'il ne soit pas reutilise
             (folder / f"scan_origine{scan_file.suffix.lower()}").write_bytes(data)
             scan_file.unlink()
-        db.audit(c, x_user, "controle", f"id={cid} modele={modele_id} statut={res.statut}",
+        db.audit(c, user["login"], "controle", f"id={cid} modele={modele_id} statut={res.statut}",
                  request.client.host if request.client else "")
     return _controle(cid)
 
@@ -164,26 +217,28 @@ def _controle(cid: int) -> dict:
             raise HTTPException(404, "Controle inconnu")
         ecarts = [dict(e) for e in c.execute("SELECT * FROM ecarts WHERE controle_id=? ORDER BY criticite DESC, id", (cid,))]
         v = c.execute("SELECT * FROM validations WHERE controle_id=? ORDER BY id DESC", (cid,)).fetchone()
+        m = c.execute("SELECT nom_produit, ref_produit FROM modeles_pdf WHERE id=?", (r["modele_id"],)).fetchone()
     import json
     out = {k: r[k] for k in ("id", "date_heure", "utilisateur_id", "modele_id", "statut", "score_global")}
-    out.update(json.loads(r["detail_json"]), ecarts=ecarts, validation=dict(v) if v else None)
+    out.update(json.loads(r["detail_json"]), ecarts=ecarts, validation=dict(v) if v else None,
+               modele_nom=(m["nom_produit"] or m["ref_produit"]) if m else "")
     return out
 
 
 @app.get("/api/controles/{cid}")
-def get_controle(cid: int):
+def get_controle(cid: int, user: dict = Depends(auth.current_user)):
     return _controle(cid)
 
 
 @app.get("/api/controles")
-def liste_controles(limit: int = 50):
+def liste_controles(limit: int = 50, user: dict = Depends(auth.current_user)):
     with db.conn() as c:
         return [dict(r) for r in c.execute(
             "SELECT id,date_heure,utilisateur_id,modele_id,statut,score_global FROM controles ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 @app.get("/api/controles/{cid}/image")
-def image_ecarts(cid: int):
+def image_ecarts(cid: int, user: dict = Depends(auth.current_user)):
     with db.conn() as c:
         r = c.execute("SELECT overlay_path FROM controles WHERE id=?", (cid,)).fetchone()
     if not r:
@@ -192,7 +247,7 @@ def image_ecarts(cid: int):
 
 
 @app.get("/api/controles/{cid}/zone")
-def zone(cid: int, box: str):
+def zone(cid: int, box: str, user: dict = Depends(auth.current_user)):
     """Vignette modele | etiquette alignee pour un ecart (box = x,y,w,h)."""
     try:
         x, y, w, h = (int(v) for v in box.split(","))
@@ -219,22 +274,25 @@ class Decision(BaseModel):
 
 
 @app.post("/api/controles/{cid}/validation")
-def valider(cid: int, d: Decision, request: Request, x_user: str = Header("anonyme")):
+def valider(cid: int, d: Decision, request: Request, user: dict = Depends(auth.current_user)):
     if d.decision not in ("ACCEPTE", "REFUSE"):
         raise HTTPException(400, "decision doit etre ACCEPTE ou REFUSE")
     c0 = _controle(cid)
-    if d.decision == "ACCEPTE" and c0["statut"] == "NON_CONFORME" and not d.commentaire.strip():
-        raise HTTPException(400, "Un commentaire est obligatoire pour accepter une etiquette non conforme")
+    if d.decision == "ACCEPTE" and c0["statut"] != "CONFORME":
+        if user["role"] == "operateur":
+            raise HTTPException(403, "Seul un superviseur peut accepter une etiquette non conforme ou a revoir")
+        if not d.commentaire.strip():
+            raise HTTPException(400, "Un commentaire est obligatoire pour accepter une etiquette non conforme")
     when = db.now()
     with db.conn() as c:
         c.execute("INSERT INTO validations(controle_id,utilisateur_id,date,decision,commentaire,signature_hash)"
-                  " VALUES(?,?,?,?,?,?)", (cid, x_user, when, d.decision, d.commentaire, db.sign(cid, x_user, d.decision, when)))
-        db.audit(c, x_user, "validation", f"id={cid} {d.decision}", request.client.host if request.client else "")
+                  " VALUES(?,?,?,?,?,?)", (cid, user["login"], when, d.decision, d.commentaire, db.sign(cid, user["login"], d.decision, when)))
+        db.audit(c, user["login"], "validation", f"id={cid} {d.decision}", request.client.host if request.client else "")
     return _controle(cid)
 
 
 @app.get("/api/controles/{cid}/rapport")
-def rapport(cid: int, request: Request, x_user: str = Header("anonyme")):
+def rapport(cid: int, request: Request, user: dict = Depends(auth.current_user)):
     ctl = _controle(cid)
     with db.conn() as c:
         m = dict(c.execute("SELECT * FROM modeles_pdf WHERE id=?", (ctl["modele_id"],)).fetchone())
@@ -247,7 +305,7 @@ def rapport(cid: int, request: Request, x_user: str = Header("anonyme")):
     with db.conn() as c:
         c.execute("INSERT INTO rapports(controle_id,chemin_pdf,date_generation,hash_sha256) VALUES(?,?,?,?)",
                   (cid, str(path), db.now(), hashlib.sha256(pdf).hexdigest()))
-        db.audit(c, x_user, "rapport", f"id={cid}", request.client.host if request.client else "")
+        db.audit(c, user["login"], "rapport", f"id={cid}", request.client.host if request.client else "")
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="controle_{cid}.pdf"'})
 

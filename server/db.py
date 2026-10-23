@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+import threading
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from . import config
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS utilisateurs(id INTEGER PRIMARY KEY, login_ad TEXT UNIQUE, nom TEXT, prenom TEXT,
-  role TEXT, actif INTEGER DEFAULT 1, date_creation TEXT);
+  role TEXT, actif INTEGER DEFAULT 1, date_creation TEXT, mdp_hash TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS modeles_pdf(id INTEGER PRIMARY KEY, ref_produit TEXT, fournisseur TEXT, langue TEXT,
   version TEXT, date_validation TEXT, chemin_reseau TEXT UNIQUE, hash_md5 TEXT, langues_ocr TEXT DEFAULT '',
   nom_produit TEXT DEFAULT '', code_etiquette TEXT DEFAULT '', ean TEXT DEFAULT '');
@@ -49,6 +50,8 @@ def conn():
 def init() -> None:
     with conn() as c:
         c.executescript(SCHEMA)
+        if "mdp_hash" not in [r["name"] for r in c.execute("PRAGMA table_info(utilisateurs)")]:
+            c.execute("ALTER TABLE utilisateurs ADD COLUMN mdp_hash TEXT DEFAULT ''")
         cols = [r["name"] for r in c.execute("PRAGMA table_info(modeles_pdf)")]
         for col in ("langues_ocr", "nom_produit", "code_etiquette", "ean"):
             if col not in cols:
@@ -82,6 +85,9 @@ def parse_name(stem: str) -> tuple[str, str]:
     return " ".join(words).strip(), " ".join(codes)
 
 
+_SYNC = threading.Lock()
+
+
 def sync_models() -> int:
     """Indexe tous les modeles (PDF ou image) du dossier reseau PDF_ROOT, a n'importe quelle profondeur.
 
@@ -89,7 +95,7 @@ def sync_models() -> int:
     fichier <nom>.json voisin : {"nom": "...", "code": "...", "langue": "tr"}."""
     from .engine.imaging import MODEL_EXT
     n = 0
-    with conn() as c:
+    with _SYNC, conn() as c:  # un seul indexeur a la fois (prechauffage au demarrage + requetes)
         for f in sorted(p for p in config.PDF_ROOT.rglob("*") if p.is_file() and p.suffix.lower() in MODEL_EXT):
             rel = f.relative_to(config.PDF_ROOT).parts
             md5 = hashlib.md5(f.read_bytes()).hexdigest()

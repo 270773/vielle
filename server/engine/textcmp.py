@@ -92,8 +92,12 @@ def compare_regions(model_regions, model_img, recv_img, k: float = 6.0) -> tuple
     r_thr = max(0.05, float(np.median(ratio)) + k * mad(ratio))
     n_thr = min(0.8, float(np.median(ncc)) - k * mad(ncc))
     bad = (ratio > r_thr) | (ncc < n_thr)
-    ecarts = [{"zone": "{},{},{},{}".format(*r["box"]), "type_ecart": "zone_texte_differente", "criticite": 2,
-               "valeur_attendue": "", "valeur_trouvee": ""} for r, b in zip(model_regions, bad) if b]
+    # Gravite : une zone a peine au-dessus du seuil est "a revoir" ; une zone nettement hors norme est bloquante.
+    sev = np.maximum(ratio / r_thr, (np.median(ncc) - ncc) / max(np.median(ncc) - n_thr, 1e-6))
+    both = (ratio > r_thr) & (ncc < n_thr)  # deux mesures independantes concordent : bloquant
+    ecarts = [{"zone": "{},{},{},{}".format(*r["box"]), "type_ecart": "zone_texte_differente",
+               "criticite": 2 if (sv >= 2.0 or bo) else 1, "valeur_attendue": "", "valeur_trouvee": ""}
+              for r, b, sv, bo in zip(model_regions, bad, sev, both) if b]
     return ecarts, 1 - len(ecarts) / len(model_regions)
 
 

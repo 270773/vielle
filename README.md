@@ -3,6 +3,21 @@
 Contrôle de conformité des étiquettes à réception : comparaison d'une étiquette reçue (scan/photo)
 avec un modèle PDF de référence. Voir le dossier technique `DT-LABELQC-2026-001`.
 
+## Mise en service
+
+1. **Installer** : `deploy\install.bat` (Windows, Python 3.11+) — ou `docker build -t labelqc .` (Linux).
+   Aucun pack de langue ni Tesseract n'est nécessaire.
+2. **Configurer** `config.env` : `LABELQC_PDF_ROOT` (dossier réseau des modèles), `LABELQC_SCAN_INBOX` (dossier où le scanner
+   dépose ses fichiers, réglage « scan vers dossier »).
+3. **Démarrer** : `deploy\start.bat` (ou `deploy\service.bat` pour un service Windows). Au premier démarrage, le compte
+   `admin` est créé et son mot de passe affiché une fois (ou fixé par `LABELQC_ADMIN_PASSWORD`).
+4. **Comptes** : `python -m server user add LOGIN MOTDEPASSE operateur|superviseur|admin "Nom"`.
+   Opérateur : contrôle ; superviseur : peut aussi accepter une étiquette non conforme (commentaire obligatoire) ;
+   admin : tout. Sessions de 8 h (cookie), connexions et décisions tracées dans le journal d'audit.
+5. **Utiliser** : ouvrir `http://<serveur>:8000`, choisir le scan déposé (ou un fichier), « Contrôler ». Le modèle est détecté
+   automatiquement ; le rapport PDF est généré à la demande.
+6. **HTTPS** : placer l'application derrière le reverse proxy/certificat interne de l'entreprise (non fourni).
+
 ## Ce que fait cette première version
 
 - **Modèles** : PDF ou image (BMP, PNG, JPEG) rangés en `data/modeles/{Fournisseur}/{Reference}/{Version}/modele.pdf` (ou `modele.bmp`, `.png`, `.jpg`), indexés automatiquement (MD5).
@@ -55,5 +70,6 @@ fausses alertes.
 
 ## Écart avec le dossier technique (à décider)
 
-Cette version est un socle exécutable : SQLite à la place de SQL Server, en-tête `X-User` à la place d'Active Directory/JWT,
-interface web à la place d'Electron/WPF, pas encore de scan TWAIN ni de chiffrement AES des archives.
+Écarts avec le dossier technique : SQLite à la place de SQL Server, comptes locaux à la place d'Active Directory,
+interface web à la place d'Electron/WPF, scanner via dossier d'entrée (pas de pilote TWAIN direct), archives non chiffrées,
+HTTPS à fournir par l'infrastructure.

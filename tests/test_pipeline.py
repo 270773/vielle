@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import make_label_pdf
+from conftest import login, make_label_pdf
 from server import config
 from server.engine import imaging, pipeline
 
@@ -61,12 +61,15 @@ def test_api_flux_complet(models, tmp_path):
     make_label_pdf(bad, h_code="H226")
     png = cv2.imencode(".png", scan_of(bad, tmp_path))[1].tobytes()
     with TestClient(app) as c:
+        assert c.get("/api/modeles").status_code == 401  # connexion requise
+        assert c.post("/api/login", json={"login": "admin", "password": "faux"}).status_code == 401
+        login(c)
         mid = c.get("/api/modeles").json()[0]["id"]
-        r = c.post("/api/controles", data={"modele_id": mid}, files={"image": ("e.png", png, "image/png")}, headers={"X-User": "alice"})
-        assert r.status_code == 200 and r.json()["statut"] == "NON_CONFORME"
+        r = c.post("/api/controles", data={"modele_id": mid}, files={"image": ("e.png", png, "image/png")})
+        assert r.status_code == 200 and r.json()["statut"] == "NON_CONFORME" and r.json()["utilisateur_id"] == "admin"
         cid = r.json()["id"]
-        assert c.post(f"/api/controles/{cid}/validation", json={"decision": "ACCEPTE"}).status_code == 400
-        v = c.post(f"/api/controles/{cid}/validation", json={"decision": "REFUSE", "commentaire": "H226 au lieu de H225"}, headers={"X-User": "alice"})
+        assert c.post(f"/api/controles/{cid}/validation", json={"decision": "ACCEPTE"}).status_code == 400  # commentaire requis
+        v = c.post(f"/api/controles/{cid}/validation", json={"decision": "REFUSE", "commentaire": "H226 au lieu de H225"})
         assert v.json()["validation"]["signature_hash"]
         assert c.get(f"/api/controles/{cid}/rapport").content.startswith(b"%PDF")
         assert c.get(f"/api/controles/{cid}/image").status_code == 200
@@ -110,8 +113,10 @@ def test_scan_depose_dans_le_dossier_d_entree(models, tmp_path):
     (config.SCAN_INBOX / "scan001.png").write_bytes(png)
     (config.SCAN_INBOX / "note.txt").write_text("ignore")
     with TestClient(app) as c:
+        login(c)
         assert [s["nom"] for s in c.get("/api/scans").json()] == ["scan001.png"]
         assert c.get("/api/scans/..%2Fconfig.py").status_code == 404
+        login(c)
         mid = c.get("/api/modeles").json()[0]["id"]
         r = c.post("/api/controles", data={"modele_id": mid, "scan": "scan001.png"})
         assert r.status_code == 200 and r.json()["statut"] == "NON_CONFORME"
@@ -123,6 +128,7 @@ def test_detection_automatique_du_modele(models, tmp_path):
     root = models.parent if False else models
     make_label_pdf(root / "Acme" / "ETIQ_ETHANOL_96_E200123_20kg.pdf", h_code="H225", ean="4006381333931", body="Ethanol 96 % vol")
     with TestClient(app) as c:
+        login(c)
         by_name = {m["nom_produit"]: m["id"] for m in c.get("/api/modeles").json()}
         assert any("ETHANOL" in n for n in by_name)
         assert [m["code_etiquette"] for m in c.get("/api/modeles", params={"q": "ethanol"}).json()] == ["E200123"]
@@ -132,3 +138,22 @@ def test_detection_automatique_du_modele(models, tmp_path):
         r = c.post("/api/controles", files={"image": ("s.png", scan, "image/png")})  # sans modele_id
         assert r.status_code == 200 and r.json()["statut"] in ("CONFORME", "A_REVOIR"), r.text
         assert c.post("/api/controles", files={"image": ("x.png", cv2.imencode(".png", np.full((300, 300, 3), 200, np.uint8))[1].tobytes(), "image/png")}).status_code == 409
+
+
+def test_roles_operateur_ne_peut_pas_accepter_un_non_conforme(models, tmp_path):
+    from server import auth
+    from server.main import app
+    bad = tmp_path / "bad.pdf"
+    make_label_pdf(bad, h_code="H226")
+    png = cv2.imencode(".png", scan_of(bad, tmp_path))[1].tobytes()
+    with TestClient(app) as c:
+        auth.add_user("marie", "motdepasse-op1", "operateur")
+        login(c, "marie", "motdepasse-op1")
+        mid = c.get("/api/modeles").json()[0]["id"]
+        cid = c.post("/api/controles", data={"modele_id": mid}, files={"image": ("e.png", png, "image/png")}).json()["id"]
+        assert c.post(f"/api/controles/{cid}/validation", json={"decision": "ACCEPTE", "commentaire": "ok"}).status_code == 403
+        assert c.post(f"/api/controles/{cid}/validation", json={"decision": "REFUSE"}).status_code == 200
+        login(c)  # admin
+        assert c.post(f"/api/controles/{cid}/validation", json={"decision": "ACCEPTE", "commentaire": "derogation qualite"}).status_code == 200
+        c.post("/api/logout")
+        assert c.get(f"/api/controles/{cid}").status_code == 401

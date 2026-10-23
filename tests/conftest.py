@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _tmp = tempfile.mkdtemp()
 os.environ.update(LABELQC_DB_PATH=f"{_tmp}/t.db", LABELQC_PDF_ROOT=f"{_tmp}/modeles",
-                  LABELQC_ARCHIVE_PATH=f"{_tmp}/archives", LABELQC_OCR_LANGS="fra+eng")
+                  LABELQC_ARCHIVE_PATH=f"{_tmp}/archives", LABELQC_OCR_LANGS="fra+eng", LABELQC_ADMIN_PASSWORD="motdepasse-test")
 
 
 def make_label_pdf(path: Path, h_code: str = "H225", ean: str = "3057640385148", body: str = "Acetone 99,5 %") -> None:
@@ -36,3 +36,9 @@ def models():
     root = Path(os.environ["LABELQC_PDF_ROOT"])
     make_label_pdf(root / "Acme" / "REF001" / "1" / "modele.pdf")
     return root
+
+
+def login(client, user="admin", password="motdepasse-test"):
+    r = client.post("/api/login", json={"login": user, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()
