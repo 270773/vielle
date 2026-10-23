@@ -35,19 +35,29 @@ def trim_from_marks(img: np.ndarray) -> np.ndarray | None:
     n, _, st, _ = cv2.connectedComponentsWithStats(nonwhite, connectivity=8)
     if n < 2:
         return None
-    ax, ay, aw, ah, _ = st[max(range(1, n), key=lambda i: st[i, 4])]
+    # Artwork = emprise des gros blocs (une etiquette est faite de plusieurs blocs separes par du blanc)
+    big = [i for i in range(1, n) if st[i, 4] >= 0.002 * img.shape[0] * img.shape[1]]
+    if not big:
+        return None
+    ax, ay = min(st[i, 0] for i in big), min(st[i, 1] for i in big)
+    aw = max(st[i, 0] + st[i, 2] for i in big) - ax
+    ah = max(st[i, 1] + st[i, 3] for i in big) - ay
     xs, ys = [], []
     for x, y, w, h, area in st[1:]:
         if area < 8:
             continue
-        if w <= 4 and h >= 12 and (y + h <= ay + 2 or y >= ay + ah - 2):  # trait vertical hors artwork : position x de coupe
+        if w <= 4 and h >= 12 and (y + h <= 0.08 * img.shape[0] or y >= 0.92 * img.shape[0]):  # trait vertical hors artwork : position x de coupe
             xs.append(x + w / 2)
-        elif h <= 4 and w >= 12 and (x + w <= ax + 2 or x >= ax + aw - 2):
+        elif h <= 4 and w >= 12 and (x + w <= 0.08 * img.shape[1] or x >= 0.92 * img.shape[1]):
             ys.append(y + h / 2)
+    H, W = img.shape[:2]
+    # Reperes de coupe parfois soudes a l'artwork d'un cote : la page est centree sur la zone de coupe, on symetrise.
+    xs += [W - x for x in xs] if xs and all(x < W / 2 for x in xs) or xs and all(x > W / 2 for x in xs) else []
+    ys += [H - y for y in ys] if ys and all(y < H / 2 for y in ys) or ys and all(y > H / 2 for y in ys) else []
     if len(set(map(round, xs))) < 2 or len(set(map(round, ys))) < 2:
         return None
     x0, x1, y0, y1 = int(min(xs)), int(max(xs)) + 1, int(min(ys)), int(max(ys)) + 1
-    if (x1 - x0) < 0.7 * aw or (y1 - y0) < 0.7 * ah:  # incoherent avec l'artwork
+    if (x1 - x0) < 0.5 * W or (y1 - y0) < 0.5 * H:  # incoherent avec la page
         return None
     return img[y0:y1, x0:x1]
 

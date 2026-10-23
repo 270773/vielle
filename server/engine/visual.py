@@ -103,7 +103,8 @@ def color_diff(model: np.ndarray, recv_aligned: np.ndarray, out: np.ndarray, thr
     """Ecarts de couleur : deltaE (CIELAB) entre les deux images lissees, par zones."""
     def lab(img):
         small = cv2.resize(img, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-        x = cv2.cvtColor(cv2.GaussianBlur(small, (0, 0), 5), cv2.COLOR_BGR2LAB).astype(np.float32)
+        # filtre median : efface les traits du texte (graisse variable selon l'impression), garde la teinte du fond
+        x = cv2.cvtColor(cv2.medianBlur(small, 21), cv2.COLOR_BGR2LAB).astype(np.float32)
         return x * [100 / 255, 1, 1] - [0, 128, 128]
     de = cv2.resize(np.linalg.norm(lab(model) - lab(recv_aligned), axis=2), (model.shape[1], model.shape[0]),
                     interpolation=cv2.INTER_LINEAR)
@@ -150,7 +151,7 @@ def _clear_border(mask: np.ndarray, frac: float = 0.015) -> None:
     mask[:b, :] = 0; mask[-b:, :] = 0; mask[:, :b] = 0; mask[:, -b:] = 0
 
 
-def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.0004, tol: int = 8):
+def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.0004, tol: int = 8, ignore_boxes=()):
     """Retourne (ecarts, score SSIM, image annotee)."""
     g1, g2 = (cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in (model, recv_aligned))
     half = lambda g: cv2.GaussianBlur(cv2.resize(g, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA), (5, 5), 0)
@@ -163,6 +164,8 @@ def diff(model: np.ndarray, recv_aligned: np.ndarray, min_area_ratio: float = 0.
                           cv2.bitwise_and(b2, cv2.bitwise_not(cv2.dilate(b1, k))))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     _clear_border(mask)
+    for x, y, w, h in ignore_boxes:  # zones de texte : verifiees separement (seuils relatifs au scan)
+        mask[max(y - 6, 0):y + h + 6, max(x - 6, 0):x + w + 6] = 0
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     total = mask.shape[0] * mask.shape[1]

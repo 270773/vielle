@@ -89,9 +89,12 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
         model_text = recv_text = ""
         text_ecarts, text_sim = textcmp.compare_regions(regions, model_cmp, recv_aligned)
     code_ecarts, codes = barcodes.compare(model_img, recv_aligned, image, expected=expected_codes)
-    vis_ecarts, ssim, overlay = visual.diff(model_cmp, recv_aligned)
+    vis_ecarts, ssim, overlay = visual.diff(model_cmp, recv_aligned, ignore_boxes=[r["box"] for r in regions] if not use_ocr else ())
 
     col_ecarts = visual.color_diff(model_cmp, recv_aligned, overlay)
+    for e in text_ecarts:  # zones de texte differentes : cadre orange
+        x, y, w, h = (int(v) for v in e["zone"].split(","))
+        cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 140, 255), 4)
     ecarts = code_ecarts + text_ecarts + vis_ecarts + col_ecarts
     if color_shift > 0.2:  # transformation de couleur tres forte : toute l'etiquette a une autre teinte
         ecarts.append({"zone": "etiquette", "type_ecart": "couleur_globale", "criticite": 2,

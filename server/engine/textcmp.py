@@ -51,6 +51,9 @@ def text_regions(img: np.ndarray) -> list[dict]:
         bg = gray[y:y + h, x:x + w][ink[y:y + h, x:x + w] == 0]
         if bg.size and float(np.percentile(bg, 75) - np.percentile(bg, 25)) > 20:
             continue
+        inkpx = gray[y:y + h, x:x + w][ink[y:y + h, x:x + w] > 0]
+        if bg.size and inkpx.size and abs(float(inkpx.mean()) - float(bg.mean())) < 60:  # peu contraste : grains, texture
+            continue
         out.append({"text": "", "conf": 100.0, "box": (x, y, w, h)})
     return out
 
