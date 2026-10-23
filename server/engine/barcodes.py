@@ -1,7 +1,11 @@
 """Lecture et comparaison des codes-barres / QR codes."""
+import os
+
 import cv2
 import numpy as np
 try:
+    if os.environ.get("LABELQC_NO_ZBAR"):  # pour tester le repli OpenCV
+        raise ImportError
     from pyzbar import pyzbar
 except (ImportError, OSError):  # ZBar/VC++ absents (cas frequent sous Windows) : repli sur OpenCV
     pyzbar = None
@@ -38,8 +42,14 @@ def _decode(gray: np.ndarray) -> list[tuple[str, str, tuple[int, int, int, int]]
 def read(img: np.ndarray) -> list[tuple[str, str]]:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     found = set()
-    for variant in (gray, cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]):
+    variants = [gray, cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]]
+    for variant in variants:
         found |= {(t, v) for t, v, _ in _decode(variant)}
+    if not found and pyzbar is None:  # le detecteur OpenCV est sensible a l'echelle : on retente en agrandissant/reduisant
+        for f in (1.5, 2.0, 0.7, 0.5):
+            found |= {(t, v) for t, v, _ in _decode(cv2.resize(gray, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC))}
+            if found:
+                break
     return sorted(found)
 
 
