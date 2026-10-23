@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabelQC</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --fg:#1d2330; --muted:#6b7280; --line:#e2e5ea; --accent:#1f5eff;
+          --ok:#15803d; --warn:#b45309; --ko:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#10131a; --card:#1a1f2b; --fg:#e8ebf2; --muted:#9aa3b2; --line:#2a3141; } }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,sans-serif }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); display:flex; gap:12px; align-items:center }
+  header h1 { margin:0; font-size:18px } header input { margin-left:auto }
+  main { max-width:1100px; margin:20px auto; padding:0 16px; display:grid; gap:16px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:end } label { display:grid; gap:4px; font-size:13px; color:var(--muted) }
+  select,input,textarea,button { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  button { background:var(--accent); color:#fff; border:0; cursor:pointer } button.sec { background:transparent; color:var(--fg); border:1px solid var(--line) }
+  button:disabled { opacity:.5 }
+  .badge { display:inline-block; padding:3px 10px; border-radius:99px; color:#fff; font-weight:600 }
+  .CONFORME { background:var(--ok) } .A_REVOIR { background:var(--warn) } .NON_CONFORME { background:var(--ko) }
+  table { width:100%; border-collapse:collapse; font-size:13px } th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top }
+  img.ov { max-width:100%; border:1px solid var(--line); border-radius:8px }
+  .crit3 { color:var(--ko); font-weight:600 } .crit2 { color:var(--warn); font-weight:600 }
+  @media (max-width:700px) { .grid2 { grid-template-columns:1fr !important } }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px }
+</style>
+</head>
+<body>
+<header><h1>LabelQC — contrôle des étiquettes à réception</h1><input id="user" placeholder="Opérateur" value="operateur1"></header>
+<main>
+  <section class="card">
+    <div class="row">
+      <label>Modèle de référence<select id="modele"></select></label>
+      <label>Langue de l'étiquette<select id="lang"><option value="">identique au modèle</option><option>fr</option><option>en</option><option>de</option><option>es</option></select></label>
+      <label>Photo / scan de l'étiquette reçue<input id="file" type="file" accept="image/*" capture="environment"></label>
+      <button id="go">Contrôler</button>
+    </div>
+    <p id="msg" style="color:var(--muted);margin:8px 0 0"></p>
+  </section>
+  <section id="result" class="card" hidden>
+    <div class="row" style="align-items:center">
+      <h2 style="margin:0">Résultat <span id="statut" class="badge"></span></h2>
+      <span id="score" style="color:var(--muted)"></span>
+      <span style="margin-left:auto" class="row">
+        <button class="sec" id="rapport">Rapport PDF</button>
+      </span>
+    </div>
+    <div class="grid2" style="margin-top:12px">
+      <div><h3>Étiquette reçue — écarts en rouge</h3><img id="ov" class="ov" alt="Écarts"></div>
+      <div><h3>Écarts (<span id="n"></span>)</h3>
+        <table><thead><tr><th>Crit.</th><th>Type</th><th>Attendu</th><th>Trouvé</th></tr></thead><tbody id="ecarts"></tbody></table>
+        <h3>Codes-barres</h3><pre id="codes" style="white-space:pre-wrap;font-size:12px"></pre>
+        <h3>Décision</h3>
+        <label>Commentaire<textarea id="comm" rows="2"></textarea></label>
+        <div class="row" style="margin-top:8px"><button id="acc">Accepter</button><button id="ref" class="sec">Refuser</button></div>
+        <p id="decmsg" style="color:var(--muted)"></p>
+      </div>
+    </div>
+  </section>
+  <section class="card"><h2 style="margin-top:0">Derniers contrôles</h2>
+    <table><thead><tr><th>#</th><th>Date</th><th>Opérateur</th><th>Statut</th><th>Score</th></tr></thead><tbody id="hist"></tbody></table></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const hdr = () => ({ 'X-User': $('user').value || 'anonyme' });
+let current = null;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function loadModeles() {
+  const r = await (await fetch('/api/modeles')).json();
+  $('modele').innerHTML = r.length ? r.map(m => `<option value="${m.id}">${esc(m.fournisseur)} / ${esc(m.ref_produit)} / v${esc(m.version)}</option>`).join('')
+                                   : '<option value="">Aucun modèle — déposer un PDF dans data/modeles/…</option>';
+}
+async function loadHist() {
+  const r = await (await fetch('/api/controles')).json();
+  $('hist').innerHTML = r.map(c => `<tr><td>${c.id}</td><td>${esc(c.date_heure)}</td><td>${esc(c.utilisateur_id)}</td><td><span class="badge ${c.statut}">${c.statut}</span></td><td>${c.score_global}</td></tr>`).join('');
+}
+function show(c) {
+  current = c; $('result').hidden = false;
+  $('statut').textContent = c.statut; $('statut').className = 'badge ' + c.statut;
+  $('score').textContent = `Score ${c.score_global}/100 · texte ${c.scores.texte} · visuel ${c.scores.ssim}`;
+  $('ov').src = `/api/controles/${c.id}/image?t=${Date.now()}`;
+  $('n').textContent = c.ecarts.length;
+  $('ecarts').innerHTML = c.ecarts.map(e => `<tr><td class="crit${e.criticite}">${e.criticite}</td><td>${esc(e.type_ecart)}</td><td>${esc(e.valeur_attendue)}</td><td>${esc(e.valeur_trouvee)}</td></tr>`).join('') || '<tr><td colspan="4">Aucun écart</td></tr>';
+  $('codes').textContent = `Modèle : ${c.codes.modele.join(', ') || '—'}\nReçu : ${c.codes.recu.join(', ') || '—'}`;
+  $('decmsg').textContent = c.validation ? `Décision enregistrée : ${c.validation.decision} (${c.validation.utilisateur_id})` : '';
+}
+$('go').onclick = async () => {
+  if (!$('modele').value || !$('file').files[0]) { $('msg').textContent = 'Choisir un modèle et une image.'; return; }
+  const fd = new FormData(); fd.append('modele_id', $('modele').value); fd.append('langue_etiquette', $('lang').value); fd.append('image', $('file').files[0]);
+  $('go').disabled = true; $('msg').textContent = 'Analyse en cours…';
+  try {
+    const r = await fetch('/api/controles', { method: 'POST', body: fd, headers: hdr() });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    show(await r.json()); $('msg').textContent = ''; loadHist();
+  } catch (e) { $('msg').textContent = 'Erreur : ' + e.message; }
+  $('go').disabled = false;
+};
+async function decide(decision) {
+  const r = await fetch(`/api/controles/${current.id}/validation`, { method: 'POST', headers: { ...hdr(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, commentaire: $('comm').value }) });
+  if (!r.ok) { $('decmsg').textContent = (await r.json()).detail; return; }
+  show(await r.json());
+}
+$('acc').onclick = () => decide('ACCEPTE'); $('ref').onclick = () => decide('REFUSE');
+$('rapport').onclick = () => window.open(`/api/controles/${current.id}/rapport`, '_blank');
+loadModeles(); loadHist();
+</script>
+</body>
+</html>
