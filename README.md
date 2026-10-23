@@ -31,12 +31,16 @@ pytest
   analysé puis rangé avec le contrôle. Une étiquette posée au milieu d'une feuille A4 est détourée automatiquement.
 - Les images peuvent aussi être envoyées directement (`image=`), y compris des photos.
 
-## Langues
+## Langues : rien à installer
 
-L'OCR et la comparaison fonctionnent dans toutes les langues dont le pack Tesseract est installé (`GET /api/langues`).
-Un fichier optionnel `modele.json` à côté du modèle précise les langues imprimées :
-`{"langue": "tr", "langues_etiquette": ["tr", "ar", "en"]}`. La comparaison mot à mot s'appuie sur l'image de chaque mot,
-donc elle reste valable pour les écritures non latines (arabe, cyrillique, CJK…) tant que l'OCR les localise.
+Par défaut la vérification est **purement visuelle** (`LABELQC_OCR=off`) : zones de texte, symboles, logos et couleurs
+sont comparés à l'image du modèle, donc quelle que soit la langue ou l'écriture, sans pack de langue.
+Chaque écart est localisé et le rapport affiche une vignette « modèle | étiquette ».
+Option : `LABELQC_OCR=on` (+ `pip install -r requirements-ocr.txt`, Tesseract et ses packs) pour obtenir en plus le texte
+exact des écarts (`H225` ≠ `H226`).
+
+**Recommandé : scan à plat.** Sur photo (éclairage, netteté, perspective), la comparaison visuelle produit beaucoup de
+fausses alertes.
 
 ## Écart avec le dossier technique (à décider)
 

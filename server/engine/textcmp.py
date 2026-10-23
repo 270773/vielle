@@ -5,7 +5,6 @@ from difflib import SequenceMatcher
 
 import cv2
 import numpy as np
-import pytesseract
 
 from .. import config
 
@@ -22,6 +21,7 @@ ISO_TO_TESS = {"fr": "fra", "en": "eng", "de": "deu", "es": "spa", "it": "ita", 
 
 
 def installed_langs() -> list[str]:
+    import pytesseract
     return sorted(l for l in pytesseract.get_languages(config="") if l != "osd")
 
 
@@ -36,8 +36,50 @@ def ocr_langs_for(codes: str) -> str:
     return "+".join(out) or config.OCR_LANGS
 
 
+def text_regions(img: np.ndarray) -> list[dict]:
+    """Localise les mots/groupes de glyphes sans OCR (valable pour toute langue et toute ecriture)."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ink = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15)
+    ink = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 3)))
+    cnts, _ = cv2.findContours(ink, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = []
+    for c in cnts:
+        x, y, w, h = cv2.boundingRect(c)
+        if h < 10 or w < 10 or h > 150 or w > 700:  # bruit, ou grande zone (photo) traitee par la comparaison de formes
+            continue
+        out.append({"text": "", "conf": 100.0, "box": (x, y, w, h)})
+    return out
+
+
+def _local_diff(mg, rg, box, tol: int = 2) -> bool:
+    """Un glyphe change (chiffre, lettre, accent) ? Comparaison de l'encre a +-tol px pres dans la zone."""
+    x, y, w, h = box
+    H, W = mg.shape
+    sl = (slice(max(y - 3, 0), min(y + h + 3, H)), slice(max(x - 3, 0), min(x + w + 3, W)))
+    ink = [cv2.adaptiveThreshold(g[sl], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 12) for g in (mg, rg)]
+    k = np.ones((2 * tol + 1, 2 * tol + 1), np.uint8)
+    diff = cv2.bitwise_or(cv2.bitwise_and(ink[0], cv2.bitwise_not(cv2.dilate(ink[1], k))),
+                          cv2.bitwise_and(ink[1], cv2.bitwise_not(cv2.dilate(ink[0], k))))
+    diff = cv2.morphologyEx(diff, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+    # Glyphe change : soit un bloc d'encre differente, soit une somme de petites differences dispersees.
+    n, _, stats, _ = cv2.connectedComponentsWithStats(diff)
+    biggest = max((stats[i, cv2.CC_STAT_AREA] for i in range(1, n)), default=0)
+    total = int(diff.sum() // 255)
+    return biggest >= max(12, 0.02 * h * h) or total >= max(60, 0.025 * int(ink[0].sum() // 255))
+
+
+def compare_regions(model_regions, model_img, recv_img, thresh: float = 0.8) -> tuple[list[dict], float]:
+    """Verification sans OCR : chaque zone de texte du modele doit se retrouver a l'identique dans l'etiquette."""
+    mg, rg = (cv2.createCLAHE(2.0, (8, 8)).apply(cv2.cvtColor(i, cv2.COLOR_BGR2GRAY)) for i in (model_img, recv_img))
+    ecarts = [{"zone": "{},{},{},{}".format(*r["box"]), "type_ecart": "zone_texte_differente", "criticite": 2,
+               "valeur_attendue": "", "valeur_trouvee": ""}
+              for r in model_regions if not _present(mg, rg, r["box"], thresh=thresh) or _local_diff(mg, rg, r["box"])]
+    return ecarts, 1 - len(ecarts) / len(model_regions) if model_regions else 1.0
+
+
 def ocr_words(img: np.ndarray, langs: str | None = None, min_conf: int = 60) -> list[dict]:
     """Mots fiables avec leur boite (x, y, w, h) ; l'image est supposee deja a l'echelle de travail."""
+    import pytesseract
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     d = pytesseract.image_to_data(gray, lang=langs or config.OCR_LANGS, config="--psm 11",
                                   output_type=pytesseract.Output.DICT)

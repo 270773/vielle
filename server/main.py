@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 
 import cv2
+import numpy as np
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -101,7 +102,7 @@ async def creer_controle(request: Request, modele_id: int = Form(...), langue_et
     except ValueError as e:
         raise HTTPException(400, str(e))
     res = pipeline.run(Path(m["chemin_reseau"]), img,
-                       langs=textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]), model_lang=m["langue"], label_lang=langue_etiquette or None)
+                       langs=textcmp.ocr_langs_for(m["langues_ocr"] or m["langue"]) if config.USE_OCR else None, model_lang=m["langue"], label_lang=langue_etiquette or None)
 
     with db.conn() as c:
         cur = c.execute("INSERT INTO controles(date_heure,utilisateur_id,modele_id,statut,score_global,detail_json)"
@@ -112,6 +113,8 @@ async def creer_controle(request: Request, modele_id: int = Form(...), langue_et
         folder = config.ARCHIVE_PATH / f"controle_{cid}"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "etiquette_recue.png").write_bytes(cv2.imencode(".png", img)[1].tobytes())
+        cv2.imwrite(str(folder / "modele_rendu.png"), res.model_img)
+        cv2.imwrite(str(folder / "etiquette_alignee.png"), res.recv_aligned)
         (folder / "ecarts.jpg").write_bytes(cv2.imencode(".jpg", res.overlay)[1].tobytes())
         c.execute("UPDATE controles SET image_path=?, overlay_path=? WHERE id=?",
                   (str(folder / "etiquette_recue.png"), str(folder / "ecarts.jpg"), cid))
@@ -161,6 +164,28 @@ def image_ecarts(cid: int):
     return FileResponse(r["overlay_path"], media_type="image/jpeg")
 
 
+@app.get("/api/controles/{cid}/zone")
+def zone(cid: int, box: str):
+    """Vignette modele | etiquette alignee pour un ecart (box = x,y,w,h)."""
+    try:
+        x, y, w, h = (int(v) for v in box.split(","))
+    except ValueError:
+        raise HTTPException(400, "box invalide")
+    return Response(_crop_pair(cid, x, y, w, h), media_type="image/png")
+
+
+def _crop_pair(cid: int, x: int, y: int, w: int, h: int) -> bytes:
+    folder = config.ARCHIVE_PATH / f"controle_{cid}"
+    a, b = cv2.imread(str(folder / "modele_rendu.png")), cv2.imread(str(folder / "etiquette_alignee.png"))
+    if a is None or b is None:
+        raise HTTPException(404, "Controle inconnu")
+    m = 20
+    x0, y0 = max(x - m, 0), max(y - m, 0)
+    ca, cb = a[y0:y + h + m, x0:x + w + m], b[y0:y + h + m, x0:x + w + m]
+    sep = np.full((ca.shape[0], 8, 3), (0, 0, 255), np.uint8)
+    return cv2.imencode(".png", np.hstack([ca, sep, cb]))[1].tobytes()
+
+
 class Decision(BaseModel):
     decision: str  # ACCEPTE | REFUSE
     commentaire: str = ""
@@ -187,7 +212,9 @@ def rapport(cid: int, request: Request, x_user: str = Header("anonyme")):
     with db.conn() as c:
         m = dict(c.execute("SELECT * FROM modeles_pdf WHERE id=?", (ctl["modele_id"],)).fetchone())
         ov = c.execute("SELECT overlay_path FROM controles WHERE id=?", (cid,)).fetchone()["overlay_path"]
-    pdf = report.build(ctl, m, ctl["ecarts"], ctl["validation"], Path(ov).read_bytes())
+    def crop_of(z):
+        return _crop_pair(cid, *(int(v) for v in z.split(",")))
+    pdf = report.build(ctl, m, ctl["ecarts"], ctl["validation"], Path(ov).read_bytes(), crop_of)
     path = config.ARCHIVE_PATH / f"controle_{cid}" / "rapport.pdf"
     path.write_bytes(pdf)
     with db.conn() as c:

@@ -3,7 +3,6 @@ uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 opencv-python-headless>=4.9
 Pillow>=10.3
-pytesseract>=0.3.10
 PyMuPDF>=1.24
 scikit-image>=0.23
 pyzbar>=0.1.9

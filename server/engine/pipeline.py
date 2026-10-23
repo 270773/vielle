@@ -20,10 +20,13 @@ class Result:
     scores: dict
     aligne: bool
     overlay: np.ndarray = field(repr=False, default=None)
+    model_img: np.ndarray = field(repr=False, default=None)
+    recv_aligned: np.ndarray = field(repr=False, default=None)
 
 
 def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
-        model_lang: str | None = None, label_lang: str | None = None) -> Result:
+        model_lang: str | None = None, label_lang: str | None = None, use_ocr: bool | None = None) -> Result:
+    use_ocr = config.USE_OCR if use_ocr is None else use_ocr
     model_img = imaging.load_model(model_pdf, config.RENDER_DPI)
     if max(model_img.shape[:2]) < config.WORK_SIZE:  # modele image basse resolution : on agrandit pour l'OCR
         f = config.WORK_SIZE / max(model_img.shape[:2])
@@ -33,16 +36,19 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
 
     recv_aligned = visual.match_colors(recv_aligned, model_img)
 
-    model_words = textcmp.ocr_words(model_img, langs)
-    recv_words = textcmp.ocr_words(recv_aligned, langs)
-    native = imaging.pdf_text(model_pdf).strip()
-    # Beaucoup de PDF d'imprimeur ont le texte vectorise : peu de texte natif => on s'appuie sur l'OCR.
-    model_text = native if len(native.split()) >= 15 else textcmp.words_to_text(model_words)
-    recv_text = textcmp.words_to_text(recv_words)
-    if model_lang and label_lang and model_lang != label_lang:
-        recv_text = textcmp.translate(recv_text, label_lang, model_lang)
-
-    text_ecarts, text_sim = textcmp.compare_words(model_words, recv_words, model_img, recv_aligned)
+    if use_ocr:
+        model_words = textcmp.ocr_words(model_img, langs)
+        recv_words = textcmp.ocr_words(recv_aligned, langs)
+        native = imaging.pdf_text(model_pdf).strip()
+        # Beaucoup de PDF d'imprimeur ont le texte vectorise : peu de texte natif => on s'appuie sur l'OCR.
+        model_text = native if len(native.split()) >= 15 else textcmp.words_to_text(model_words)
+        recv_text = textcmp.words_to_text(recv_words)
+        if model_lang and label_lang and model_lang != label_lang:
+            recv_text = textcmp.translate(recv_text, label_lang, model_lang)
+        text_ecarts, text_sim = textcmp.compare_words(model_words, recv_words, model_img, recv_aligned)
+    else:  # comparaison d'images : aucune langue a installer
+        model_text = recv_text = ""
+        text_ecarts, text_sim = textcmp.compare_regions(textcmp.text_regions(model_img), model_img, recv_aligned)
     code_ecarts, codes = barcodes.compare(model_img, recv_aligned, image)
     vis_ecarts, ssim, overlay = visual.diff(model_img, recv_aligned)
 
@@ -59,4 +65,4 @@ def run(model_pdf: Path, image: np.ndarray, langs: str | None = None,
     barcode_ok = 0.0 if code_ecarts else 1.0
     score = round(100 * (0.5 * text_sim + 0.3 * max(ssim, 0) + 0.2 * barcode_ok), 1)
     return Result(statut, score, ecarts, model_text, recv_text, codes,
-                  {"texte": round(text_sim, 3), "ssim": round(ssim, 3)}, aligned, overlay)
+                  {"texte": round(text_sim, 3), "ssim": round(ssim, 3)}, aligned, overlay, model_img, recv_aligned)

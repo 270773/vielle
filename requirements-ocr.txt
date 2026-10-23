@@ -1,0 +1,2 @@
+# Optionnel : lecture du texte (LABELQC_OCR=on). Necessite Tesseract + packs de langues sur le serveur.
+pytesseract>=0.3.10

@@ -49,7 +49,7 @@
     <div class="grid2" style="margin-top:12px">
       <div><h3>Étiquette reçue — écarts en rouge</h3><img id="ov" class="ov" alt="Écarts"></div>
       <div><h3>Écarts (<span id="n"></span>)</h3>
-        <table><thead><tr><th>Crit.</th><th>Type</th><th>Attendu</th><th>Trouvé</th></tr></thead><tbody id="ecarts"></tbody></table>
+        <table><thead><tr><th>Crit.</th><th>Type</th><th>Modèle | étiquette</th><th>Attendu</th><th>Trouvé</th></tr></thead><tbody id="ecarts"></tbody></table>
         <h3>Codes-barres</h3><pre id="codes" style="white-space:pre-wrap;font-size:12px"></pre>
         <h3>Décision</h3>
         <label>Commentaire<textarea id="comm" rows="2"></textarea></label>
@@ -82,7 +82,7 @@ function show(c) {
   $('score').textContent = `Score ${c.score_global}/100 · texte ${c.scores.texte} · visuel ${c.scores.ssim}`;
   $('ov').src = `/api/controles/${c.id}/image?t=${Date.now()}`;
   $('n').textContent = c.ecarts.length;
-  $('ecarts').innerHTML = c.ecarts.map(e => `<tr><td class="crit${e.criticite}">${e.criticite}</td><td>${esc(e.type_ecart)}</td><td>${esc(e.valeur_attendue)}</td><td>${esc(e.valeur_trouvee)}</td></tr>`).join('') || '<tr><td colspan="4">Aucun écart</td></tr>';
+  $('ecarts').innerHTML = c.ecarts.map(e => `<tr><td class="crit${e.criticite}">${e.criticite}</td><td>${esc(e.type_ecart)}</td><td>${/^\d+,\d+,\d+,\d+$/.test(e.zone) ? `<img loading="lazy" style="max-width:160px" src="/api/controles/${c.id}/zone?box=${e.zone}">` : ''}</td><td>${esc(e.valeur_attendue)}</td><td>${esc(e.valeur_trouvee)}</td></tr>`).join('') || '<tr><td colspan="5">Aucun écart</td></tr>';
   $('codes').textContent = `Modèle : ${c.codes.modele.join(', ') || '—'}\nReçu : ${c.codes.recu.join(', ') || '—'}`;
   $('decmsg').textContent = c.validation ? `Décision enregistrée : ${c.validation.decision} (${c.validation.utilisateur_id})` : '';
 }

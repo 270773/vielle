@@ -10,7 +10,8 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 COLORS = {"CONFORME": colors.green, "A_REVOIR": colors.orange, "NON_CONFORME": colors.red}
 
 
-def build(controle: dict, modele: dict, ecarts: list[dict], validation: dict | None, overlay_jpg: bytes | None) -> bytes:
+def build(controle: dict, modele: dict, ecarts: list[dict], validation: dict | None, overlay_jpg: bytes | None,
+          crop_of=None) -> bytes:
     st = getSampleStyleSheet()
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=15 * mm,
@@ -28,10 +29,13 @@ def build(controle: dict, modele: dict, ecarts: list[dict], validation: dict | N
                            ("TEXTCOLOR", (1, 3), (1, 3), COLORS.get(controle["statut"], colors.black))]))
     s += [t, Spacer(1, 8), Paragraph(f"Ecarts detectes ({len(ecarts)})", st["Heading2"])]
     if ecarts:
-        rows = [["Crit.", "Zone", "Type", "Attendu", "Trouve"]] + [
-            [str(e["criticite"]), e["zone"][:18], e["type_ecart"], Paragraph(e["valeur_attendue"][:120], st["BodyText"]),
-             Paragraph(e["valeur_trouvee"][:120], st["BodyText"])] for e in ecarts]
-        et = Table(rows, colWidths=[12 * mm, 25 * mm, 32 * mm, 52 * mm, 54 * mm], repeatRows=1)
+        def visual(e):  # vignette modele | etiquette pour les ecarts localises
+            png = crop_of(e["zone"]) if crop_of and e["zone"].count(",") == 3 else None
+            return Image(BytesIO(png), width=40 * mm, height=18 * mm, kind="proportional") if png else ""
+        rows = [["Crit.", "Type", "Modele | Etiquette", "Attendu", "Trouve"]] + [
+            [str(e["criticite"]), e["type_ecart"], visual(e), Paragraph(e["valeur_attendue"][:120], st["BodyText"]),
+             Paragraph(e["valeur_trouvee"][:120], st["BodyText"])] for e in ecarts[:40]]
+        et = Table(rows, colWidths=[12 * mm, 32 * mm, 50 * mm, 40 * mm, 41 * mm], repeatRows=1)
         et.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.grey), ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                                 ("VALIGN", (0, 0), (-1, -1), "TOP"), ("FONTSIZE", (0, 0), (-1, -1), 8)]))
         s.append(et)

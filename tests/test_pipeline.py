@@ -33,6 +33,15 @@ def test_code_h_modifie(models, tmp_path):
     make_label_pdf(bad, h_code="H226")
     r = pipeline.run(pdf, scan_of(bad, tmp_path))
     assert r.statut == "NON_CONFORME"
+    assert r.ecarts and max(e["criticite"] for e in r.ecarts) >= 2, r.ecarts  # sans OCR : zone/forme differente
+
+
+@pytest.mark.skipif(not __import__("shutil").which("tesseract"), reason="Tesseract absent")
+def test_code_h_modifie_avec_ocr(models, tmp_path):
+    pdf = models / "Acme" / "REF001" / "1" / "modele.pdf"
+    bad = tmp_path / "bad.pdf"
+    make_label_pdf(bad, h_code="H226")
+    r = pipeline.run(pdf, scan_of(bad, tmp_path), use_ocr=True)
     assert any(e["criticite"] == 3 and "H22" in (e["valeur_attendue"] + e["valeur_trouvee"]) for e in r.ecarts)
 
 
