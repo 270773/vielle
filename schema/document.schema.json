@@ -80,7 +80,7 @@
         "locked": { "type": "boolean", "description": "Bloc imposé par le modèle : non modifiable par le rédacteur." },
         "type": {
           "enum": ["heading", "text", "list", "callout", "keyvalue", "box", "columns", "photos", "image", "table", "docref", "annexes", "annexpreview",
-                   "fields", "checks", "area", "choice", "yesno", "visatable", "checklist", "pagebreak", "spacer", "repeat", "slot"]
+                   "fields", "checks", "area", "choice", "yesno", "visatable", "checklist", "steps", "pagebreak", "spacer", "repeat", "slot"]
         }
       }
     }

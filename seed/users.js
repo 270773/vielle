@@ -6,4 +6,5 @@ export const users = {
   FBU: { name: 'FBU', function: 'Directeur Technique' },
   GVN: { name: 'GVN', function: 'Amélioration Continue' },
   ADP: { name: 'ADP', function: 'Responsable Qualité' },
+  DSY: { name: 'DSY', function: 'Responsable Séchages' },
 };

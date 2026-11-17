@@ -88,3 +88,13 @@ test('renvoi [[REF]] dans un texte ou une liste : résolu dans la GED, signalé 
   assert.match(renderBlocks([{ type: 'text', text: 'Cf. [[K.1]].' }], ctx), /Cf\. <span class="docref">K\.1 <i>– Audits 5S \(v2\)<\/i><\/span>\./);
   assert.match(renderBlocks([{ type: 'list', items: ['Voir [[K.9]]'] }], ctx), /docref missing/);
 });
+
+test('étapes illustrées : numérotation continue sur les sections, annotations positionnées en % de l’image', () => {
+  const html = renderBlocks([{ type: 'steps', headers: ['N°', 'Opérations', ''], sections: [
+    { title: 'Avant', steps: [{ text: 'Ouvrir', image: { src: '/i.png', annotations: [{ shape: 'ellipse', x: 10, y: 20, w: 30, h: 15, color: '#ff0000' }, { shape: 'label', x: 5, y: 5, text: '1' }] } }] },
+    { title: 'Pendant', steps: [{ text: 'Cliquer\n- sur C\n- sur NC' }] }] }], {});
+  assert.deepEqual([...html.matchAll(/<td class="c">(\d+)<\/td>/g)].map((m) => m[1]), ['1', '2']);
+  assert.match(html, /class="an ellipse" style="left:10%;top:20%;width:30%;height:15%;border-color:#ff0000"/);
+  assert.match(html, /class="an label" style="left:5%;top:5%;color:#ff0000">1</);
+  assert.match(html, /class="dash">– sur C/); assert.match(html, /<tr class="sec"><td colspan="3">Pendant/);
+});

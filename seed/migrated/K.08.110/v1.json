@@ -1,0 +1,329 @@
+{
+  "kind": "document",
+  "layout": {
+    "orientation": "portrait"
+  },
+  "status": "en_vigueur",
+  "workflow": {
+    "redacteur": "GVN",
+    "examinateur": "DSY",
+    "approbateur": "FAR"
+  },
+  "visas": [
+    {
+      "role": "redacteur",
+      "userId": "GVN",
+      "name": "GVN",
+      "function": "",
+      "date": "2022-06-16",
+      "hash": "afa88c667b77ee9e653f003d3d2c9a62bc6f75ad73355f5e151d85a1a820b9cd",
+      "origin": "migration"
+    },
+    {
+      "role": "examinateur",
+      "userId": "DSY",
+      "name": "DSY",
+      "function": "Responsable Séchages",
+      "date": "2022-06-16",
+      "hash": "afa88c667b77ee9e653f003d3d2c9a62bc6f75ad73355f5e151d85a1a820b9cd",
+      "origin": "migration"
+    },
+    {
+      "role": "approbateur",
+      "userId": "FAR",
+      "name": "FAR",
+      "function": "Directeur Technique",
+      "date": "2022-06-16",
+      "hash": "afa88c667b77ee9e653f003d3d2c9a62bc6f75ad73355f5e151d85a1a820b9cd",
+      "origin": "migration"
+    }
+  ],
+  "meta": {
+    "created": "2022-06-16",
+    "effective": "2022-06-16",
+    "annule": null,
+    "society": "LIS France",
+    "ref": "K.08.110",
+    "version": 1,
+    "dest": [
+      "Salle Imprimantes",
+      "Resp. Séchages"
+    ],
+    "keywords": [
+      "Audit de travail standardisé",
+      "Tablette"
+    ],
+    "title": "MODE OPÉRATOIRE : RÉALISATION D’UN AUDIT DE TRAVAIL STANDARDISÉ",
+    "service": "Excelis",
+    "annexes": [],
+    "migration": {
+      "source": "K08110-1.docx",
+      "notes": [
+        "Numérotation d'origine discontinue (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14) : renumérotée 1 à 13 automatiquement. Vérifier les renvois internes éventuels."
+      ],
+      "legacy": [
+        {
+          "role": "redacteur",
+          "userId": "GVN",
+          "name": "GVN",
+          "function": "",
+          "date": "2022-06-16"
+        },
+        {
+          "role": "examinateur",
+          "userId": "DSY",
+          "name": "DSY",
+          "function": "Responsable Séchages",
+          "date": "2022-06-16"
+        },
+        {
+          "role": "approbateur",
+          "userId": "FAR",
+          "name": "FAR",
+          "function": "Directeur Technique",
+          "date": "2022-06-16"
+        }
+      ]
+    }
+  },
+  "body": [
+    {
+      "type": "steps",
+      "headers": [
+        "N°",
+        "Opérations",
+        ""
+      ],
+      "sections": [
+        {
+          "title": "Avant l’audit de travail standardisé",
+          "steps": [
+            {
+              "text": "Ouvrir l’application Synergytab",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image1.png",
+                "annotations": []
+              }
+            },
+            {
+              "text": "Entrer l’identifiant et le mot de passe en cliquant au-dessus du clavier ",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image2.jpeg",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": 24.7,
+                    "y": 43.4,
+                    "w": 49.8,
+                    "h": 14.9,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Cliquer sur « Menu » en haut à gauche",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image3.jpeg",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": -1.9,
+                    "y": -2.2,
+                    "w": 15.6,
+                    "h": 17.1,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Cliquer sur « Formulaires » ",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image4.jpeg",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": -3.6,
+                    "y": 35.8,
+                    "w": 31.7,
+                    "h": 8.9,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "- Cliquer sur « Audit de travail standardisé »\n- Cliquer sur « Remplir un nouveau formulaire » ",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image5.png",
+                "annotations": [
+                  {
+                    "shape": "label",
+                    "text": "2",
+                    "x": 61.9,
+                    "y": 5,
+                    "w": 13.5,
+                    "h": 15.4,
+                    "color": "#ff0000"
+                  },
+                  {
+                    "shape": "ellipse",
+                    "x": 31.6,
+                    "y": 9.8,
+                    "w": 31.3,
+                    "h": 10.6,
+                    "color": "#FF0000"
+                  },
+                  {
+                    "shape": "label",
+                    "text": "1",
+                    "x": -13.9,
+                    "y": 48.8,
+                    "w": 8.9,
+                    "h": 15.1,
+                    "color": "#ff0000"
+                  },
+                  {
+                    "shape": "ellipse",
+                    "x": -2.9,
+                    "y": 49.9,
+                    "w": 36.9,
+                    "h": 17.9,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Compléter l’en-tête du formulaire : \n- Nom de l’auditeur : noter votre nom\n- Le nom de l’opérateur audité \n- Le nom de standard audité (ex : standard de lavage ...)\n- Nom de la zone où est réalisé l’audit\n- L’étape auditée (ex : phase de mise en place du NEP)\n- Numéro des séquences audités (mettre les numéro correspondant au été du mode op)",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image6.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": -4.7,
+                    "y": 0.7,
+                    "w": 112.2,
+                    "h": 33.3,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "Pendant l’audit",
+          "steps": [
+            {
+              "text": "Cliquer sur « ✅ C » si le critère est conforme\nCliquer sur « ❌ NC » si le critère est non conforme\nCliquer sur «  NO » si le critère n’a pas été observé ",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image7.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": 19.5,
+                    "y": 37.3,
+                    "w": 32.8,
+                    "h": 14.5,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Vous avez la possibilité d’ajouter des observations dans la case blanche. Pour compléter celle-ci, cliquer sur la case de la ligne correspondante au critère et renseigner le commentaire",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image8.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": 46.1,
+                    "y": 36.8,
+                    "w": 32.4,
+                    "h": 16.7,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "En cas de non-conformité, indiquer la cause de non-conformité : lié au process, ou lié à l’opérateur",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image9.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": 71.9,
+                    "y": 35.5,
+                    "w": 31.7,
+                    "h": 16.4,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "A la fin de l’audit vous avez la possibilité de noter un commentaire général.\nIl vous est aussi demandé si il est nécessaire de réviser le standard (en cas de modif technique ou autre nouvelle pratique, veiller à ce qu’il soit à jour).\nIndiquer aussi si l’opérateur a besoin d’un recadrage par son hiérarchique si il refuse de respecter le standard et /ou les remarques.",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image10.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": -12.7,
+                    "y": 29.1,
+                    "w": 111.6,
+                    "h": 23,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Si vous avez des suggestions d’améliorations, vous avez également la possibilité de les ajouter dans l’encadré « AMELIORATION »",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image11.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": -12.3,
+                    "y": 40.3,
+                    "w": 114.1,
+                    "h": 57.6,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "A la fin de l’audit",
+          "steps": [
+            {
+              "text": "Indiquer le nombre de défauts en bas de la page et signer.\nCliquer ensuite sur « Envoyer » en haut à droite",
+              "image": {
+                "src": "/assets/migrated/K.08.110-v1/image12.png",
+                "annotations": [
+                  {
+                    "shape": "ellipse",
+                    "x": 85.5,
+                    "y": -1.2,
+                    "w": 16.9,
+                    "h": 15.1,
+                    "color": "#FF0000"
+                  }
+                ]
+              }
+            },
+            {
+              "text": "Laisser l’application ouverte. La tablette se mettra en veille automatiquement"
+            }
+          ]
+        }
+      ],
+      "id": "b1"
+    }
+  ]
+}

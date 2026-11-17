@@ -32,7 +32,7 @@ laissent des interstices.
 
 `heading` · `text` · `list` (puces, numéros `{n}.` `{n}>`, coches) · `callout` · `keyvalue` · `table` · `columns` ·
 `box` · `photos` · `image` · `docref` · `annexes` · `annexpreview` · `checklist` · `fields` · `checks` · `area` ·
-`choice` · `yesno` · `visatable` · `pagebreak` · `spacer` · `repeat` (+ `slot`).
+`choice` · `yesno` · `visatable` · `steps` · `pagebreak` · `spacer` · `repeat` (+ `slot`).
 
 - **Numérotation toujours automatique** (titres, listes) : supprime les erreurs de numérotation manuelle. Dans le K.08.111
   d'origine, l'agenda était numéroté 1, 2, 3, 4, **3**, 5 ; il sort désormais 1 à 6 ou 1 à 7.
@@ -40,6 +40,12 @@ laissent des interstices.
 - **Renvois** : `[[K.16.001]]` dans un texte, ou bloc `docref`. Titre et version viennent de la GED ; introuvable = signalé.
 - **Colonnes** : `widths: [1, 1, 2]` fixe le nombre et les proportions ; chaque colonne contient des blocs.
 - **`locked: true`** : bloc imposé par le modèle (non modifiable hors « mode concepteur »).
+
+### Étapes illustrées (`steps`)
+
+Table numérotée *N° | Opérations | capture* en sections. La numérotation est continue sur toute la table. Chaque capture porte
+des **annotations** `{shape: ellipse|rect|label, x, y, w, h, color, text}` en % des dimensions de l'image : elles restent des
+données (modifiables, versionnables, indépendantes de la résolution), contrairement à une image où le cercle rouge est incrusté.
 
 ### Section répétable (`repeat`)
 
@@ -89,19 +95,26 @@ GET  /api/catalog, /api/users             documents en vigueur, annuaire
    `meta.created/effective/annule` depuis le client (c'est déjà le cas dans `PUT`).
 5. Appliquer côté serveur les blocs `locked` en comparant le document reçu au modèle.
 
-## Reprise de l'existant (à construire)
+## Reprise de l'existant
 
-Approche proposée : migration **assistée par lots, par gabarit**, avec rapport d'écart par document.
+Outil : `tools/migrate/` (`npm run migrate -- <fichiers>`). Principe : convertir ce qui est structuré, signaler le reste.
 
-| Source | Outil | Remarques observées sur les quatre documents pilotes |
-|---|---|---|
-| `.doc` / `.xls` / `.ppt` (binaires) | LibreOffice headless → `.docx` / `.xlsx` / `.pptx` | l'annexe A.134 est un `.doc` 97-2003 |
-| Word | `mammoth` / pandoc : styles → blocs | les cases à cocher sont des caractères de police (Wingdings) ; une carte était dessinée 4 fois (72 zones de texte) : à reconstruire plutôt qu'à convertir |
-| Excel | `openpyxl` : ligne → point de contrôle | le plan de nettoyage est un objet Excel collé en image |
-| PowerPoint | diapositive → étape | — |
+**Ce que les documents réels ont révélé** (et qui a guidé le convertisseur) :
 
-Chaque lot produit des notes de migration (`meta.migration.notes`, visibles dans l'éditeur, jamais imprimées) : société
-d'origine différente, chemin réseau à remplacer par un lien GED, numérotation incohérente corrigée, image basse résolution,
-document cité non encore migré, etc. Le fichier d'origine reste conservé en lecture seule.
+| Constat | Conséquence |
+|---|---|
+| Cartouche = vrais en-têtes / pieds de page Word : en-tête de première page, en-tête courant, pied de page de première page | lecture directe des champs, aucune ressaisie |
+| Les trois pieds de page ont trois structures (4 lignes éclatées ; 2 × 3 avec valeur sous le libellé) ; l'en-tête existe en 4 ou 7 cellules ; des runs coupent « K.08.11 » + « 1 » | lecture **par libellés**, pas par position de cellule |
+| Fonction de FAR : Responsable Technique (2015), Directeur Technique (2022), Directeur Général (2025) | la fonction est lue dans le pied de page et **figée dans le visa** |
+| Tableaux de mise en page (une ligne = un bloc ; éléments d'une même liste répartis sur plusieurs lignes) | aplatissement + fusion des listes consécutives |
+| ☞ = paragraphe séparé, dans la colonne de marge, aligné à la main avec l'élément modifié (en gras) | rattachement par ligne de tableau + nombre d'éléments en gras |
+| Numérotation manuelle fautive (agenda 1,2,3,4,3,5 ; étapes 1–6 puis 8–14) | numérotation automatique + alerte |
+| Annotations = formes Word ancrées (`wp:anchor` ellipse / zone de texte) positionnées en EMU relativement à la colonne et au paragraphe | conversion en % de l'image |
+| Mode « repli » `mc:Fallback` (VML) qui duplique les formes | ignoré pour ne pas compter deux fois |
+| Cases à cocher = caractères de police (Webdings, Wingdings) ; planche de formulaires = même carte × 4 | symboles mappés ; copies identiques fusionnées et signalées |
+| **Grilles collées en images PNG** (K.08.111, K.08.104) | détectées par taille, signalées « à retranscrire » |
+
+**Reste à construire** : Excel (`openpyxl` : ligne → point de contrôle), PowerPoint (diapositive → étape), transcription des
+images textuelles (saisie, OCR ou modèle de vision avec relecture humaine), reconstruction des annexes-formulaires.
 
 Commencer par 20 à 30 documents représentatifs pour calibrer les règles par gabarit avant le lot complet.

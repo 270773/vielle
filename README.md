@@ -3,7 +3,7 @@
 Prototype d'un éditeur de documents **sans Word ni Excel** : chaque document est un JSON structuré
 (cartouche standard + corps configurable) que la GED stocke, vise et versionne, et qui produit un PDF fidèle.
 
-Il a été construit à partir de quatre documents réels, repris comme modèles pilotes :
+Il a été construit à partir de cinq documents réels, repris comme modèles pilotes :
 
 | Réf. | Type | Ce qu'il démontre |
 |---|---|---|
@@ -11,6 +11,7 @@ Il a été construit à partir de quatre documents réels, repris comme modèles
 | **K.08.100** | Procédure narrative avec photos, 6 p. | Titres numérotés, encadré « Attention », rangées de photos, plan, renvoi GED `[[K.16.001]]` |
 | **K.08.104** v2 | Fiche courte | Fiche clé/valeur, aperçu de l'annexe A.134 *généré depuis l'annexe en vigueur*, marques ☞ « modifié dans cette version » |
 | **A.134** v3 | Annexe-formulaire recto-verso | Une carte définie **une fois**, imprimée 4 par feuille A4, recto-verso, QR vers la version en vigueur |
+| **K.08.110** v1 | Procédure en étapes avec captures d'écran annotées | Bloc « étapes illustrées » : numérotation continue, annotations (cercles, cadres, étiquettes) stockées comme **données** et non incrustées dans l'image. **Produit par le convertisseur** à partir du `.docx` |
 
 ## Lancer
 
@@ -19,10 +20,10 @@ npm install
 npm install --no-save playwright        # rendu PDF (Chromium ≥ 131 requis, voir « Limites »)
 npx playwright install chromium         # inutile si Chromium est déjà présent (variable CHROMIUM_PATH)
 npm start                               # http://localhost:3000   (PORT=… pour changer)
-npm test                                # 19 tests (workflow, rendu)
+npm test                                # 28 tests (workflow, rendu, convertisseur)
 ```
 
-Au premier démarrage, les quatre documents sont écrits dans `data/` (ignoré par git). `node seed/index.js --force`
+Au premier démarrage, les cinq documents sont écrits dans `data/` (ignoré par git). `node seed/index.js --force`
 remet tout à zéro.
 
 ## Ce que fait l'éditeur
@@ -43,6 +44,38 @@ remet tout à zéro.
   mention « copie imprimée non contrôlée » et QR vers la version en vigueur.
 - **Tablette** : affichage adaptatif (onglets Édition / Aperçu), autosauvegarde après 2 s d'inactivité.
 
+## Migration Word → JSON
+
+```bash
+npm run migrate -- K08110-1.docx K08104-2.doc --out data/documents --assets data/assets
+#   --legacy-visas   importe le document « en vigueur » avec ses visas historiques (fonction figée)
+#   --force          écrase une version déjà migrée
+```
+
+Les `.doc` sont d'abord convertis par LibreOffice (`soffice`). Le convertisseur lit **ce qui est structuré** dans le Word et
+**signale ce qui ne l'est pas** (rapport affiché + `meta.migration.notes`, visible dans l'éditeur, jamais imprimé) :
+
+- **cartouche** lu dans l'en-tête et le pied de page Word *par libellés* (les trois pieds de page rencontrés ont trois
+  structures différentes) : référence, version, destinataires, mots-clés, titre, dates, rédacteur / examinateur /
+  approbateur **avec leur fonction de l'époque**, version annulée ;
+- **corps** : paragraphes, titres, listes (numérotées, à puces, coches), fiches « LIBELLÉ : valeur », tableaux de données,
+  tableaux de mise en page aplatis (colonnes côte à côte conservées), tableaux d'étapes illustrées ;
+- **images** extraites ; **formes d'annotation** (cercles, étiquettes) converties en annotations positionnées en % ;
+- **marques ☞** (« modifié dans cette version ») rattachées à l'élément concerné.
+
+Résultats sur vos quatre fichiers sources :
+
+| Source | Cartouche | Corps converti automatiquement | À reprendre |
+|---|---|---|---|
+| `K08104-2.doc` | complet, identique à ma transcription manuelle | tout le texte (14 chaînes sur 15 identiques à ma transcription ; la 15ᵉ diffère par un espace que **j'avais ajouté**, le convertisseur est plus fidèle) ; 4 marques ☞ sur 4 | image de la carte → remplacée par l'aperçu de A.134 |
+| `K08110-1.docx` | complet | 13 étapes, 12 captures, 14 annotations (positions vérifiées visuellement sur les premières pages, par comparaison avec le rendu Word) ; saut de numérotation d'origine (1–6, 8–14) signalé | — |
+| `K08111-2.docx` | complet (v2, annule v1) | **les titres seulement** : les 11 grilles de 8 cadres sont des **images PNG collées** | 12 images (≈ 1230 × 640 px) à retranscrire ; 4 marques ☞ non rattachables |
+| `A134-3.doc` | absent (référence déduite du nom de fichier) | planche de 8 cartes réduite à un exemplaire de chaque contenu | carte à reconstruire en annexe-carte (c'est fait dans le prototype) ; 4 zones de texte flottantes ignorées |
+
+Conséquence pour la reprise : **le taux de conversion automatique dépend du mode de fabrication du document, pas de son type.**
+Un Word construit avec de vrais tableaux, listes et formes (K.08.110, K.08.104) se convertit presque intégralement ; un Word
+qui colle des images de tableaux (K.08.111) ne se convertit pas : il faut retranscrire. Le convertisseur le détecte et le dit.
+
 ## Organisation du code
 
 | Chemin | Rôle | Réutilisable tel quel dans la GED ? |
@@ -53,7 +86,8 @@ remet tout à zéro.
 | `schema/document.schema.json` | Contrat du format (JSON Schema 2020-12) | **Oui** |
 | `public/` | Éditeur web (HTML/JS sans framework) | À intégrer, voir ci-dessous |
 | `server.js` | Stockage fichiers, annuaire factice, API, PDF | **Non** : à remplacer par les services de la GED |
-| `seed/` | Les quatre documents pilotes transcrits | Exemples de modèles |
+| `tools/migrate/` | Convertisseur Word → JSON (CLI + bibliothèque) | **Oui** (Node) |
+| `seed/` | Documents pilotes : quatre transcrits à la main, K.08.110 produit par le convertisseur (`seed/migrated/`) | Exemples de modèles |
 
 Détails du modèle de données, du workflow et du plan de reprise de l'existant : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -61,8 +95,11 @@ Détails du modèle de données, du workflow et du plan de reprise de l'existant
 
 Ce qui n'est **pas** fait, pour ne pas surestimer l'état du projet :
 
-1. **Pas d'outil de migration Word/Excel/PowerPoint → JSON.** Les quatre documents ont été transcrits à la main à partir des
-   PDF ; les sources Word n'étaient pas disponibles. Le taux de conversion automatique reste à mesurer sur vos `.docx`/`.xlsx`.
+1. **Migration : seul le Word est couvert** (`.docx`, et `.doc` via LibreOffice). Pas d'Excel ni de PowerPoint. Le texte contenu dans
+   des **images** n'est pas converti (K.08.111 : 11 grilles) : retranscription manuelle, OCR ou transcription assistée à prévoir.
+   Le K.08.111 **v2** (contenu différent de la v1 transcrite, par ex. « 2f/semaine », « 8h30>9h ») n'est pas intégré aux données
+   de démonstration, faute de transcription de ses images. Les annotations sont placées par données numériques ; pas encore de
+   déplacement à la souris dans l'aperçu.
 2. **Export Word et Excel des annexes non implémenté** : seul le PDF est produit. Le champ `print.formats` du schéma
    prévoit `docx` et `xlsx` pour plus tard.
 3. **Authentification et annuaire simulés** : le menu « Connecté en tant que » choisit un utilisateur factice. Les rôles du

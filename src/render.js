@@ -102,7 +102,7 @@ const BLOCKS = {
     `<figure class="image" style="width:${esc(b.width || '100%')}">${imgOrPlaceholder(b.src, b.caption)}${b.caption ? `<figcaption>${inline(b.caption)}</figcaption>` : ''}</figure>`,
 
   table: (b) =>
-    `<table class="grid"><thead><tr>${asArray(b.headers).map((h) => `<th>${inline(h)}</th>`).join('')}</tr></thead><tbody>${asArray(b.rows)
+    `<table class="grid">${asArray(b.headers).length ? `<thead><tr>${asArray(b.headers).map((h) => `<th>${inline(h)}</th>`).join('')}</tr></thead>` : ''}<tbody>${asArray(b.rows)
       .map((r) => `<tr>${r.map((c) => `<td>${multi(c)}</td>`).join('')}</tr>`)
       .join('')}</tbody></table>`,
 
@@ -129,6 +129,29 @@ const BLOCKS = {
     const face = d.card.faces.find((f) => f.id === (b.face || 'recto')) || d.card.faces[0];
     const one = `<div class="annexprev-card" style="zoom:${b.zoom || 0.62}">${renderCard(d, face, d.card.faces.indexOf(face), ctx, { fixed: true })}</div>`;
     return `<div class="annexprev">${one.repeat(b.count || 1)}</div><div class="cap">Annexe ${esc(b.ref)} (v${d.meta.version})</div>`;
+  },
+
+
+  // Procédure en étapes numérotées, chacune avec une capture d'écran annotée (cercles, flèches, étiquettes).
+  // La numérotation est continue sur toute la table, sections comprises. Les annotations sont des données
+  // (position en % de l'image) : modifiables, non « incrustées » dans l'image.
+  steps(b) {
+    let n = 0;
+    const hd = asArray(b.headers);
+    const line = (l) => (l.startsWith('- ') ? `<div class="dash">– ${inline(l.slice(2))}</div>` : `<div>${inline(l)}</div>`);
+    const ann = (a) => {
+      const pos = `left:${a.x}%;top:${a.y}%;`;
+      const col = esc(a.color || '#ff0000');
+      return a.shape === 'label'
+        ? `<b class="an label" style="${pos}color:${col}">${esc(a.text)}</b>`
+        : `<i class="an ${a.shape === 'rect' ? 'rect' : 'ellipse'}" style="${pos}width:${a.w}%;height:${a.h}%;border-color:${col}"></i>`;
+    };
+    const img = (im) => (im?.src ? `<div class="annimg"><img src="${esc(im.src)}" alt="">${asArray(im.annotations).map(ann).join('')}</div>` : '');
+    return `<table class="steps"><thead><tr><th class="c">${esc(hd[0] || 'N°')}</th><th colspan="2">${esc(hd[1] || 'Opérations')}</th></tr></thead><tbody>${asArray(b.sections)
+      .map((sec) => `${sec.title ? `<tr class="sec"><td colspan="3">${inline(sec.title)}</td></tr>` : ''}${asArray(sec.steps)
+        .map((st) => `<tr><td class="c">${++n}</td><td class="stx">${String(st.text || '').split('\n').filter(Boolean).map(line).join('')}</td><td class="sim">${img(st.image)}</td></tr>`)
+        .join('')}`)
+      .join('')}</tbody></table>`;
   },
 
   // ── éléments de formulaire (annexes et checklists) ──
@@ -291,6 +314,14 @@ table.checklist td{height:7mm}
 .cardbody>*{padding-left:0}
 .cardbody>.fields,.cardbody>.checks,.cardbody>.yesno,.cardbody>.columns{padding:0 2mm}
 .annexprev{display:flex;gap:3mm}
+
+table.steps th,table.steps td{border:var(--line);padding:1.5mm 2mm;vertical-align:middle;text-align:left} table.steps th{background:var(--shade);text-align:center}
+table.steps td.c{text-align:center;width:9mm} table.steps td.stx{width:46%} table.steps tr{break-inside:avoid}
+table.steps tr.sec td{background:#e7e9ee;font-weight:700;text-align:center;padding:.6mm}
+table.steps .dash{padding-left:3mm;text-indent:-3mm} table.steps td.sim{text-align:center;padding:1mm}
+.annimg{position:relative;display:inline-block;line-height:0;max-width:100%} .annimg img{max-width:100%;max-height:62mm;height:auto;width:auto}
+.annimg .an{position:absolute;box-sizing:border-box;line-height:1} .annimg .ellipse{border:.8mm solid #f00;border-radius:50%} .annimg .rect{border:.8mm solid #f00}
+.annimg .label{font:700 11pt Arial,"Liberation Sans",sans-serif}
 
 .list.indent{margin-left:7mm} .list.nested{margin-left:14mm}
 .columns+.columns{margin-top:-.3mm}

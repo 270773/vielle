@@ -1,5 +1,5 @@
 // Écrit les documents pilotes dans data/documents/<REF>/v<N>.json (sans écraser l'existant, sauf --force).
-import { mkdir, writeFile, access, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, access, readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { withIds } from './helpers.js';
@@ -33,6 +33,10 @@ export async function seed({ force = false } = {}) {
   await mkdir(root, { recursive: true });
   await writeFile(join(root, 'users.json'), JSON.stringify(users, null, 2));
   const created = [];
+  // Documents issus de la migration Word → JSON (tools/migrate), déjà complets (ids, visas historiques).
+  const migDir = join(dirname(fileURLToPath(import.meta.url)), 'migrated');
+  const migrated = [];
+  for (const ref of await readdir(migDir).catch(() => [])) for (const f of await readdir(join(migDir, ref))) migrated.push(JSON.parse(await readFile(join(migDir, ref, f), 'utf8')));
   for (const raw of [k111, k100, k104, a134]) {
     const doc = withIds(structuredClone(raw));
     if (doc.status === 'en_vigueur') doc.visas = migratedVisas(doc);
@@ -42,6 +46,14 @@ export async function seed({ force = false } = {}) {
     await mkdir(dir, { recursive: true });
     await writeFile(file, JSON.stringify(doc, null, 2));
     created.push(`${doc.meta.ref} v${doc.meta.version}`);
+  }
+  for (const doc of migrated) {
+    const dir = join(root, 'documents', doc.meta.ref);
+    const file = join(dir, `v${doc.meta.version}.json`);
+    if (!force && (await exists(file))) continue;
+    await mkdir(dir, { recursive: true });
+    await writeFile(file, JSON.stringify(doc, null, 2));
+    created.push(`${doc.meta.ref} v${doc.meta.version} (migré)`);
   }
   return created;
 }

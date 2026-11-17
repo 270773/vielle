@@ -37,6 +37,7 @@ const TYPES = {
   callout: ['Encadré Attention / Info', () => ({ type: 'callout', kind: 'attention', text: '' })],
   keyvalue: ['Fiche clé / valeur', () => ({ type: 'keyvalue', rows: [['Clé :', 'Valeur']] })],
   table: ['Tableau', () => ({ type: 'table', headers: ['Colonne 1', 'Colonne 2'], rows: [['', '']] })],
+  steps: ['Étapes illustrées (captures annotées)', () => ({ type: 'steps', headers: ['N°', 'Opérations', ''], sections: [{ title: '', steps: [{ text: '', image: { src: '', annotations: [] } }] }] })],
   columns: ['Colonnes', () => ({ type: 'columns', widths: [1, 1], cells: [[], []] })],
   box: ['Cadre titré', () => ({ type: 'box', title: 'Titre du cadre', children: [] })],
   photos: ['Rangée de photos', () => ({ type: 'photos', perRow: 2, items: [{ caption: '' }, { caption: '' }] })],
@@ -54,7 +55,7 @@ const TYPES = {
   pagebreak: ['Saut de page', () => ({ type: 'pagebreak' })],
   spacer: ['Espace', () => ({ type: 'spacer', height: '6mm' })],
 };
-const PALETTE = [['Texte', ['heading', 'text', 'list', 'callout']], ['Structure', ['columns', 'box', 'keyvalue', 'table']], ['Médias et liens', ['photos', 'image', 'docref', 'annexes', 'annexpreview']], ['Formulaire', ['checklist', 'fields', 'checks', 'area', 'choice', 'yesno', 'visatable']], ['Mise en page', ['pagebreak', 'spacer']]];
+const PALETTE = [['Texte', ['heading', 'text', 'list', 'callout']], ['Structure', ['steps', 'columns', 'box', 'keyvalue', 'table']], ['Médias et liens', ['photos', 'image', 'docref', 'annexes', 'annexpreview']], ['Formulaire', ['checklist', 'fields', 'checks', 'area', 'choice', 'yesno', 'visatable']], ['Mise en page', ['pagebreak', 'spacer']]];
 const typeLabel = (t) => TYPES[t]?.[0] || (t === 'repeat' ? 'Section répétable' : t);
 
 function summary(b) {
@@ -67,6 +68,7 @@ function summary(b) {
     case 'photos': return `${(b.items || []).length} photos`;
     case 'docref': case 'annexpreview': return b.ref;
     case 'repeat': return `${(b.instances || []).length} instances`;
+    case 'steps': return `${(b.sections || []).reduce((n, x) => n + (x.steps || []).length, 0)} étapes`;
     case 'keyvalue': return `${(b.rows || []).length} lignes`;
     default: return '';
   }
@@ -133,8 +135,35 @@ function blockBody(b, path) {
     case 'spacer': return fText('Hauteur (ex. 6mm)', p('height'), b.height);
     case 'pagebreak': return '<div class="muted">Saut de page.</div>';
     case 'repeat': return repeatBody(b, path);
+    case 'steps': return stepsBody(b, path);
     default: return `<div class="muted">Type non éditable : ${esc(b.type)}</div>`;
   }
+}
+
+
+// Étapes illustrées : sections → étapes (texte + capture) → annotations positionnées en % de l'image.
+function stepsBody(b, path) {
+  const p = (...k) => [...path, ...k];
+  const edit = !ro() && !LOCK;
+  const btns = (pa) => (edit ? `<button class="btn sm" data-act="up" data-path="${P(pa)}" aria-label="Monter">↑</button><button class="btn sm" data-act="down" data-path="${P(pa)}" aria-label="Descendre">↓</button><button class="btn sm" data-act="del" data-path="${P(pa)}" aria-label="Supprimer">✕</button>` : '');
+  const annEd = (a, pa) => `<div class="row" style="align-items:flex-end;gap:6px">
+      <label class="f" style="width:96px">Forme<select ${attr([...pa, 'shape'], 'str')}>${[['ellipse', 'Cercle'], ['rect', 'Cadre'], ['label', 'Étiquette']].map(([v, l]) => `<option value="${v}"${a.shape === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${['x', 'y', 'w', 'h'].map((k) => `<label class="f" style="width:68px">${k.toUpperCase()} %<input type="number" step="0.5" value="${esc(a[k] ?? '')}" ${attr([...pa, k], 'num')}></label>`).join('')}
+      ${a.shape === 'label' ? `<label class="f" style="width:70px">Texte<input type="text" value="${esc(a.text ?? '')}" ${attr([...pa, 'text'], 'str')}></label>` : ''}
+      <label class="f" style="width:96px">Couleur<input type="text" value="${esc(a.color ?? '#ff0000')}" ${attr([...pa, 'color'], 'str')}></label>
+      ${edit ? `<button class="btn sm" data-act="del" data-path="${P(pa)}" aria-label="Supprimer l’annotation">✕</button>` : ''}</div>`;
+  const stepEd = (st, pa) => `<div class="blk"><div class="bh"><span class="t">Étape</span><span class="s">${esc(String(st.text || '').split('\n')[0].replace(/\*\*|__/g, '').slice(0, 60))}</span>${btns(pa)}</div><div class="bb">
+      ${fArea('Texte — une ligne par paragraphe ; « - » en début de ligne = tiret', [...pa, 'text'], st.text, 3)}
+      <div class="row" style="align-items:flex-start">${st.image?.src ? `<img class="thumb" src="${esc(st.image.src)}" alt="">` : ''}<input type="file" accept="image/*" capture="environment" data-act="upload" data-path="${P([...pa, 'image', 'src'])}"${dis(LOCK)} aria-label="Capture d’écran"></div>
+      ${(st.image?.annotations || []).map((a, j) => annEd(a, [...pa, 'image', 'annotations', j])).join('')}
+      ${edit && st.image?.src ? `<div class="row"><button class="btn sm" data-act="addann" data-shape="ellipse" data-path="${P([...pa, 'image'])}">＋ Cercle</button><button class="btn sm" data-act="addann" data-shape="rect" data-path="${P([...pa, 'image'])}">＋ Cadre</button><button class="btn sm" data-act="addann" data-shape="label" data-path="${P([...pa, 'image'])}">＋ Étiquette</button></div>` : ''}
+    </div></div>`;
+  return `${fArea('En-têtes (N° | Opérations)', p('headers'), (b.headers || []).join(' | '), 1, 'csv')}
+    ${(b.sections || []).map((sec, si) => `<details class="blk" open><summary class="bh"><span class="t">Section</span><span class="s">${esc(sec.title || '(sans titre)')} · ${(sec.steps || []).length} étapes</span>${btns(p('sections', si))}</summary><div class="bb">
+      ${fText('Titre de la section', p('sections', si, 'title'), sec.title)}
+      ${(sec.steps || []).map((st, i) => stepEd(st, p('sections', si, 'steps', i))).join('')}
+      ${edit ? `<div><button class="btn sm" data-act="addstep" data-path="${P(p('sections', si))}">＋ Étape</button></div>` : ''}</div></details>`).join('')}
+    ${edit ? `<div><button class="btn sm" data-act="addsec" data-path="${P(path)}">＋ Section</button></div>` : ''}`;
 }
 
 // Section répétable : contenus partagés / jeux / instances (surcharges).
@@ -335,7 +364,9 @@ $('#editor').addEventListener('change', async (e) => {
     try {
       const r = await fetch('/api/assets', { method: 'POST', headers: { 'content-type': f.type }, body: f });
       const j = await r.json(); if (!r.ok) throw new Error(j.error);
-      const [obj, key] = parent(unP(el.dataset.path)); obj[key] = j.src;
+      const up = unP(el.dataset.path); let o = S.doc; // crée les objets intermédiaires manquants (ex. step.image)
+      for (let n = 0; n < up.length - 1; n++) { const k = up[n]; if (o[k] == null) o[k] = typeof up[n + 1] === 'number' ? [] : {}; o = o[k]; }
+      o[up[up.length - 1]] = j.src; if (up[up.length - 2] === 'image') o.annotations ??= [];
       markDirty(); renderEditor();
     } catch (err) { toast(err.message, true); }
     return;
@@ -375,6 +406,9 @@ $('#editor').addEventListener('click', async (e) => {
     else if (act === 'addphoto') get(S.doc, path).items.push({ caption: '' });
     else if (act === 'addinst') { const r = get(S.doc, path), last = r.instances[r.instances.length - 1]; r.instances.push({ title: 'Nouvelle instance', ...(last?.preset ? { preset: last.preset } : {}), slots: structuredClone(last?.slots || {}) }); }
     else if (act === 'unoverride') delete arr[i];
+    else if (act === 'addstep') get(S.doc, path).steps.push({ text: '', image: { src: '', annotations: [] } });
+    else if (act === 'addsec') get(S.doc, path).sections.push({ title: 'Nouvelle section', steps: [] });
+    else if (act === 'addann') { const im = get(S.doc, path); (im.annotations ||= []).push({ shape: el.dataset.shape, x: 30, y: 30, w: 25, h: 18, color: '#ff0000', ...(el.dataset.shape === 'label' ? { text: '1' } : {}) }); }
     else return;
     markDirty(); renderEditor();
   } catch (err) { toast(err.message, true); }
