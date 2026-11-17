@@ -69,8 +69,9 @@ version (l'image de la carte dans le K.08.104 v2 était une v1 de l'annexe, sans
   (posés après le visa). `verifyIntegrity()` détecte toute modification a posteriori.
 - `PUT` sur une version non brouillon → `409`. `revise()` crée la version N+1 en brouillon (visas vidés, `annule` = N,
   marques « ! » retirées). À la mise en vigueur de N+1, la version N passe à `annule`.
-- **Diff** : `changedBlockIds()` compare par `id` les blocs de premier niveau de deux versions ; l'aperçu et le PDF
-  affichent ☞ en marge. L'éditeur le recalcule en direct pendant la rédaction.
+- **Diff** : `changedBlockIds()` compare par `id` les blocs de premier niveau de deux versions ; `changedInstances()` compare les
+  sections répétables **instance par instance sur leur contenu effectif** (modifier un contenu partagé marque toutes les instances qui le
+  suivent, pas celles qui le surchargent). L'aperçu et le PDF affichent ☞ en marge ou devant le titre de l'instance. L'éditeur le recalcule en direct pendant la rédaction.
 
 ## API (prototype)
 

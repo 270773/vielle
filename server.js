@@ -12,7 +12,7 @@ import { dirname, join, extname, normalize, sep } from 'node:path';
 import Ajv from 'ajv/dist/2020.js';
 import qrcode from 'qrcode-generator';
 import { renderPrintHtml } from './src/render.js';
-import { sign, revise, verifyIntegrity, nextStep, changedBlockIds, WorkflowError } from './src/workflow.js';
+import { sign, revise, verifyIntegrity, nextStep, changedBlockIds, changedInstances, WorkflowError } from './src/workflow.js';
 import { seed } from './seed/index.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -63,7 +63,7 @@ const qrSvg = (url) => { const q = qrcode(0, 'M'); q.addData(url); q.make(); ret
 
 async function renderCtx(req, doc) {
   const prev = await prevVersion(doc);
-  return { docs: await allLatest(), users: await users(), gedUrl: (r) => `${origin(req)}/?doc=${encodeURIComponent(r)}`, qr: qrSvg, changed: changedBlockIds(prev, doc) };
+  return { docs: await allLatest(), users: await users(), gedUrl: (r) => `${origin(req)}/?doc=${encodeURIComponent(r)}`, qr: qrSvg, changed: changedBlockIds(prev, doc), changedInst: changedInstances(prev, doc) };
 }
 
 let browserP;
@@ -129,7 +129,7 @@ async function api(req, res, url) {
     if (m === 'GET' && !action) {
       const doc = await load(ref, v);
       const prev = await prevVersion(doc);
-      return json(res, 200, { doc, integrity: verifyIntegrity(doc), nextStep: nextStep(doc), changed: [...changedBlockIds(prev, doc)], versions: await versions(ref) });
+      return json(res, 200, { doc, integrity: verifyIntegrity(doc), nextStep: nextStep(doc), changed: [...changedBlockIds(prev, doc)], changedInstances: [...changedInstances(prev, doc)], versions: await versions(ref) });
     }
     if (m === 'PUT' && !action) {
       const incoming = await readJson(req);

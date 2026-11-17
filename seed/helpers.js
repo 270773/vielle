@@ -13,12 +13,12 @@ export const IMG = (src, caption, width) => ({ type: 'image', src, caption, widt
 export const SLOT = (slot) => ({ type: 'slot', slot });
 
 /** Attribue un identifiant stable à chaque bloc (utile pour le marqueur ☞ et l'édition). */
-export function withIds(doc) {
+export function withIds(doc, prefix = 'b') {
   let n = 0;
   const walk = (x) => {
     if (Array.isArray(x)) return x.forEach(walk);
     if (!x || typeof x !== 'object') return;
-    if (typeof x.type === 'string' && !x.id && x.type !== 'slot') x.id = `b${++n}`;
+    if (typeof x.type === 'string' && !x.id && x.type !== 'slot') x.id = `${prefix}${++n}`;
     Object.values(x).forEach(walk);
   };
   walk(doc.body); walk(doc.card);

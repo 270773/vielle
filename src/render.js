@@ -190,7 +190,8 @@ const BLOCKS = {
       .map((inst, i) => {
         const slot = (name) => inst.slots?.[name] ?? b.presets?.[inst.preset]?.[name] ?? b.shared?.[name] ?? [];
         const title = (b.titleTemplate || '{title}').replace('{title}', inst.title);
-        return `<section class="rep${i > 0 ? ' newpage' : ''}"><h2 class="reptitle">${inline(title)}</h2>${renderBlocks(b.layout, { ...ctx, slot }, st)}</section>`;
+        const chg = b.id && ctx.changedInst?.has(`${b.id}::${inst.title}`);
+        return `<section class="rep${i > 0 ? ' newpage' : ''}${chg ? ' changedinst' : ''}"><h2 class="reptitle">${inline(title)}</h2>${renderBlocks(b.layout, { ...ctx, slot }, st)}</section>`;
       })
       .join('');
   },
@@ -290,6 +291,7 @@ figcaption{font-weight:700;font-style:italic;text-decoration:underline;margin-to
 .cap{font-size:8pt;color:#555;font-style:italic}
 .docref{white-space:nowrap} .docref i{font-style:normal;color:#444} .missing{color:#b00;text-decoration:underline dotted}
 .muted{color:#666} .pb{break-after:page}
+.rep.changedinst .reptitle{position:relative} .rep.changedinst .reptitle::before{content:"☞";font-family:"DejaVu Sans","Segoe UI Symbol",sans-serif;font-size:13pt;color:#000;position:absolute;left:0;top:0}
 .reptitle{color:var(--blue);text-align:center;font-size:14pt;margin:3mm 0 2mm} .rep.newpage{break-before:page}
 .ident{border:var(--line);border-top:0} .ident td{border:var(--line);padding:1.2mm 2mm;font-size:9.5pt} .ident .ttl{text-align:center;font-weight:700;font-style:italic;font-size:12.5pt;padding:1.6mm}
 .ident .kw{width:30%}

@@ -9,6 +9,7 @@ import k100 from './k08100.js';
 import k104 from './k08104.js';
 import k111 from './k08111.js';
 import a134 from './a134.js';
+import toV2 from './k08111-v2.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 const exists = (p) => access(p).then(() => true, () => false);
@@ -37,9 +38,12 @@ export async function seed({ force = false } = {}) {
   const migDir = join(dirname(fileURLToPath(import.meta.url)), 'migrated');
   const migrated = [];
   for (const ref of await readdir(migDir).catch(() => [])) for (const f of await readdir(join(migDir, ref))) migrated.push(JSON.parse(await readFile(join(migDir, ref, f), 'utf8')));
-  for (const raw of [k111, k100, k104, a134]) {
-    const doc = withIds(structuredClone(raw));
-    if (doc.status === 'en_vigueur') doc.visas = migratedVisas(doc);
+  // K.08.111 : la v2 est dérivée de la v1 (mêmes ids de blocs) ; la v1 est alors annulée.
+  const k111v1 = withIds(structuredClone(k111));
+  const k111v2 = withIds(toV2(k111v1), 'n');
+  k111v1.status = 'annule';
+  for (const doc of [k111v1, k111v2, ...[k100, k104, a134].map((r) => withIds(structuredClone(r)))]) {
+    if (doc.status === 'en_vigueur' || doc.status === 'annule') doc.visas = migratedVisas(doc);
     const dir = join(root, 'documents', doc.meta.ref);
     const file = join(dir, `v${doc.meta.version}.json`);
     if (!force && (await exists(file))) continue;

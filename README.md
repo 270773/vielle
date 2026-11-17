@@ -7,7 +7,7 @@ Il a été construit à partir de cinq documents réels, repris comme modèles p
 
 | Réf. | Type | Ce qu'il démontre |
 |---|---|---|
-| **K.08.111** | Grille de 8 cadres, **paysage**, 11 pages | Section répétable (1 mise en page, 11 instances), contenus partagés, jeux VPM 1 / 2 / 3, surcharge par instance |
+| **K.08.111** v1 → v2 | Grille de 8 cadres, **paysage**, 11 puis 12 pages | Section répétable (1 mise en page, 12 instances), contenus partagés, jeux VPM 1 / 2 / 3, surcharge par instance ; **comparaison v1 → v2 instance par instance** (☞ sur les grilles modifiées) |
 | **K.08.100** | Procédure narrative avec photos, 6 p. | Titres numérotés, encadré « Attention », rangées de photos, plan, renvoi GED `[[K.16.001]]` |
 | **K.08.104** v2 | Fiche courte | Fiche clé/valeur, aperçu de l'annexe A.134 *généré depuis l'annexe en vigueur*, marques ☞ « modifié dans cette version » |
 | **A.134** v3 | Annexe-formulaire recto-verso | Une carte définie **une fois**, imprimée 4 par feuille A4, recto-verso, QR vers la version en vigueur |
@@ -20,7 +20,7 @@ npm install
 npm install --no-save playwright        # rendu PDF (Chromium ≥ 131 requis, voir « Limites »)
 npx playwright install chromium         # inutile si Chromium est déjà présent (variable CHROMIUM_PATH)
 npm start                               # http://localhost:3000   (PORT=… pour changer)
-npm test                                # 28 tests (workflow, rendu, convertisseur)
+npm test                                # 29 tests (workflow, rendu, convertisseur)
 ```
 
 Au premier démarrage, les cinq documents sont écrits dans `data/` (ignoré par git). `node seed/index.js --force`
@@ -69,8 +69,15 @@ Résultats sur vos quatre fichiers sources :
 |---|---|---|---|
 | `K08104-2.doc` | complet, identique à ma transcription manuelle | tout le texte (14 chaînes sur 15 identiques à ma transcription ; la 15ᵉ diffère par un espace que **j'avais ajouté**, le convertisseur est plus fidèle) ; 4 marques ☞ sur 4 | image de la carte → remplacée par l'aperçu de A.134 |
 | `K08110-1.docx` | complet | 13 étapes, 12 captures, 14 annotations (positions vérifiées visuellement sur les premières pages, par comparaison avec le rendu Word) ; saut de numérotation d'origine (1–6, 8–14) signalé | — |
-| `K08111-2.docx` | complet (v2, annule v1) | **les titres seulement** : les 11 grilles de 8 cadres sont des **images PNG collées** | 12 images (≈ 1230 × 640 px) à retranscrire ; 4 marques ☞ non rattachables |
+| `K08111-2.docx` | complet (v2, annule v1) | **les titres seulement** : les 12 grilles de 8 cadres sont des **images PNG collées** | 12 images (≈ 1230 × 640 px) : **retranscrites à la main** dans `seed/k08111-v2.js` (voir ci-dessous) ; 4 marques ☞ non rattachables |
 | `A134-3.doc` | absent (référence déduite du nom de fichier) | planche de 8 cartes réduite à un exemplaire de chaque contenu | carte à reconstruire en annexe-carte (c'est fait dans le prototype) ; 4 zones de texte flottantes ignorées |
+
+**K.08.111 v2 (retranscription).** Les 12 grilles ont été lues une à une et saisies dans le format structuré, puis comparées à la v1.
+Résultat : **5 instances modifiées sur 12** (VPM 3 : 2f/semaine, mardi et jeudi, 8h30>9h, salle Aublettes… ; VPM 2 Séchage : participants ;
+VPM 1 Labo : chef d'équipe, 14h00 ; VPM 1 Logistique : 9h30 ; **nouvelle** VPM 1 MTN Mix & Pack). L'auteur n'avait marqué ☞ dans le Word que
+VPM 3 et MTN Mix & Pack : la comparaison automatique rattrape les trois autres. ⚠ Cette retranscription est **à relire intégralement** :
+le texte des images n'est pas extractible automatiquement, et la v2 est construite à partir de la v1 en n'appliquant que les différences
+relevées (tout texte jugé identique à la v1 ne l'a pas été re-saisi).
 
 Conséquence pour la reprise : **le taux de conversion automatique dépend du mode de fabrication du document, pas de son type.**
 Un Word construit avec de vrais tableaux, listes et formes (K.08.110, K.08.104) se convertit presque intégralement ; un Word
@@ -97,9 +104,8 @@ Ce qui n'est **pas** fait, pour ne pas surestimer l'état du projet :
 
 1. **Migration : seul le Word est couvert** (`.docx`, et `.doc` via LibreOffice). Pas d'Excel ni de PowerPoint. Le texte contenu dans
    des **images** n'est pas converti (K.08.111 : 11 grilles) : retranscription manuelle, OCR ou transcription assistée à prévoir.
-   Le K.08.111 **v2** (contenu différent de la v1 transcrite, par ex. « 2f/semaine », « 8h30>9h ») n'est pas intégré aux données
-   de démonstration, faute de transcription de ses images. Les annotations sont placées par données numériques ; pas encore de
-   déplacement à la souris dans l'aperçu.
+   Pour le K.08.111 v2, la retranscription des images est faite mais **non relue** (voir ci-dessus).
+   Les annotations sont placées par données numériques ; pas encore de déplacement à la souris dans l'aperçu.
 2. **Export Word et Excel des annexes non implémenté** : seul le PDF est produit. Le champ `print.formats` du schéma
    prévoit `docx` et `xlsx` pour plus tard.
 3. **Authentification et annuaire simulés** : le menu « Connecté en tant que » choisit un utilisateur factice. Les rôles du

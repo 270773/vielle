@@ -3,9 +3,9 @@
 // Toute modification après visa est refusée : on ouvre une nouvelle version (indice).
 
 import { createHash } from 'node:crypto';
-import { canonical, changedBlockIds } from './diff.js';
+import { canonical, changedBlockIds, changedInstances } from './diff.js';
 
-export { changedBlockIds };
+export { changedBlockIds, changedInstances };
 
 const STEPS = [
   { role: 'redacteur', from: 'brouillon', to: 'en_verification', label: 'Rédacteur' },

@@ -62,3 +62,19 @@ test('diff automatique : seuls les blocs modifiés ou ajoutés sont marqués ☞
   v2.body[0].text = 'modifié'; v2.body.push({ id: 'c', type: 'text', text: 'nouveau' });
   assert.deepEqual([...changedBlockIds(v1, v2)].sort(), ['a', 'b', 'c']);
 });
+
+test('diff des sections répétables : par instance, sur le contenu effectif (pas le JSON brut)', async () => {
+  const { changedInstances } = await import('../src/diff.js');
+  const T = (t) => [{ type: 'text', text: t }];
+  const rep = (over = {}, extra = []) => ({ id: 'r', type: 'repeat', shared: { a: T('commun') }, presets: { P: { a: T('jeu') } },
+    instances: [{ title: 'un' }, { title: 'deux', preset: 'P' }, { title: 'trois', slots: { a: T('propre') } }, ...extra], ...over });
+  const v1 = { body: [rep()] };
+  assert.equal(changedInstances(v1, { body: [rep()] }).size, 0);
+  // modifier le contenu partagé : seules les instances qui le suivent (« un ») changent
+  assert.deepEqual([...changedInstances(v1, { body: [rep({ shared: { a: T('nouveau') } })] })], ['r::un']);
+  // modifier le jeu P : « deux » ; une instance ajoutée est marquée
+  assert.deepEqual([...changedInstances(v1, { body: [rep({ presets: { P: { a: T('autre') } } }, [{ title: 'quatre' }])] })].sort(), ['r::deux', 'r::quatre']);
+  // les ids de blocs n'influencent pas la comparaison
+  const withId = { body: [rep({ shared: { a: [{ id: 'z', type: 'text', text: 'commun' }] } })] };
+  assert.equal(changedInstances(v1, withId).size, 0);
+});

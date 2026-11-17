@@ -1,7 +1,7 @@
 // Éditeur de documents structurés. Édition générique par « chemins » JSON : chaque champ porte data-path,
 // un seul gestionnaire d'événements applique les changements puis rafraîchit l'aperçu (même moteur que le PDF).
 import { renderScreenHtml, esc } from '/src/render.js';
-import { changedBlockIds } from '/src/diff.js';
+import { changedBlockIds, changedInstances } from '/src/diff.js';
 
 const $ = (s) => document.querySelector(s);
 const S = { list: [], cat: { docs: {}, users: {} }, doc: null, prev: null, info: null, user: null, dirty: false, tpl: false, closed: new Set(), tab: 'editor' };
@@ -276,7 +276,7 @@ function refreshPreview() {
     const d = S.doc; if (!d) return;
     const frame = $('#frame');
     const y = frame.contentWindow?.scrollY || 0;
-    const ctx = { docs: { ...S.cat.docs, [d.meta.ref]: d }, users: S.cat.users, gedUrl: (r) => `${location.origin}/?doc=${encodeURIComponent(r)}`, changed: changedBlockIds(S.prev, d) };
+    const ctx = { docs: { ...S.cat.docs, [d.meta.ref]: d }, users: S.cat.users, gedUrl: (r) => `${location.origin}/?doc=${encodeURIComponent(r)}`, changed: changedBlockIds(S.prev, d), changedInst: changedInstances(S.prev, d) };
     frame.onload = () => { fitPreview(); frame.contentWindow.scrollTo(0, y); };
     frame.srcdoc = renderScreenHtml(d, ctx);
   }, 120);

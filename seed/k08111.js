@@ -29,9 +29,9 @@ const OBJ = [
   'Avoir une vision commune des évènements de l’atelier et du site',
 ];
 
-const ul = (items) => [{ type: 'list', style: 'bullet', items }];
-const gen = (freq, jour, heure, duree, loc) => [KV([['Fréquence :', freq], ['Jour :', jour], ['Heure :', heure], ['Durée :', duree], ['Localisation :', `**${loc}**`]])];
-const part = (leader, parts) => [{ type: 'text', text: '**Leader :**' }, ...ul(leader), { type: 'text', text: '**Participants :**' }, ...ul(parts)];
+export const ul = (items) => [{ type: 'list', style: 'bullet', items }];
+export const gen = (freq, jour, heure, duree, loc) => [KV([['Fréquence :', freq], ['Jour :', jour], ['Heure :', heure], ['Durée :', duree], ['Localisation :', `**${loc}**`]])];
+export const part = (leader, parts) => [{ type: 'text', text: '**Leader :**' }, ...ul(leader), { type: 'text', text: '**Participants :**' }, ...ul(parts)];
 
 const SORTIES2 = ['Indicateurs à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées pour la semaine', 'Problèmes/sujets à remonter en VPM3', 'Déclenchement de RCA', 'Planning des interventions communiqués', 'Informations principales partagées'];
 const ENTREES2 = ['Indicateurs de la zone (SQCDME)', 'Fonctionnement depuis le début du poste', 'Remontées VPM1', 'Remontée et descente d’informations', 'Annonces, visites, évènements', 'Interventions MTN prévues'];
@@ -59,7 +59,7 @@ const repeat = {
       entrees: ul(['Indicateurs de la zone (SQCDME)', 'Fonctionnement depuis le début du poste', 'Remontée et descente d’informations', 'Annonces, visites, évènements']),
       sorties: ul(['Indicateurs à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées pour la semaine', 'Problèmes/sujets à remonter en VPM2', 'Planning des interventions communiqués', 'Informations principales partagées']),
       regles: ul(regles1),
-      agenda: [agenda2([...A_COMMUN, bold('Définition des problèmes à remonter en VPM 2'), ...TOUR])],
+      agenda: [agenda2([...A_COMMUN, bold('Définition des problèmes a remonter en VPM 2'), ...TOUR])],
     },
     VPM3: {
       objectifs: ul([
@@ -72,7 +72,7 @@ const repeat = {
         'Avoir une vision commune des évènements du site',
       ]),
       entrees: ul(['Indicateurs Sécurité', 'Indicateurs autres', 'Fonctionnement depuis le début du poste', 'Remontée de sujets des VPM 2 et pb divers pour décision', 'Remontée et descente d’informations', 'Annonces, visites, évènements']),
-      sorties: ul(['Indicateurs sécurité à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées à moyen terme (cartes T)', 'Déclenchement de RCA (pb récurrents)', 'Planning des interventions communiqué', 'Informations principales partagées']),
+      sorties: ul(['Indicateurs sécurité à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées a moyen terme (cartes T)', 'Déclenchement de RCA (pb récurrents)', 'Planning des interventions communiqué', 'Informations principales partagées']),
       regles: ul(regles3),
       agenda: [agenda2([
         bold('Revue du plan d’action (top 24h)'), bold('Revue des indicateurs Sécurité'),
@@ -102,11 +102,12 @@ const repeat = {
       general: gen('Bi hebdo', 'Mardi et Jeudi', '11h00>11h30', '30 min', 'Tableau VPM 2 MTN'),
       participants: part(['Responsable Maintenance'], ['Resp d’équipe MTN séchage', 'Resp d’équipe MTN Mix/Pack', 'Assistantes magasin', 'Méthodes MTN', 'Automaticien', 'Services généraux']),
       entrees: ul(['Indicateurs de la zone (SQCDME)', 'Remontées VPM1', 'Remontée et descente d’informations', 'Annonces, visites, évènements']),
-      sorties: ul(['Indicateurs à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées pour la semaine', 'Problèmes/sujets à remonter en VPM3', 'Déclenchement de RCA', 'Informations principales partagées', 'Commandes à relancer', 'Planning contrôles réglementaires S+1']),
+      sorties: ul(['Indicateurs à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées pour la semaine', 'Problèmes/sujets à remonter en VPM3', 'Déclenchement de RCA', 'Informations principales partagées', 'Commandes a relancer', 'Planning contrôles règlementaires S+1']),
     } },
     { title: 'VPM 2 – Qualité / Labo', slots: {
       general: gen('Quotidienne', 'Lundi au vendredi', '17h>17h30 Maxi', '30 min', 'Tableau VPM 2 qualité'),
       participants: part(['Responsable qualité/Labo'], ['Responsables qualités/secteur', 'Responsable laboratoire', 'Autres membres de l’équipe']),
+      sorties: ul(['Indicateurs à jour', 'Actions priorisées pour le jour (top 24h)', 'Actions priorisées pour la semaine', 'Problèmes/sujets à remonter en VPM3', 'Déclenchement de RCA', 'Planning des interventions communiqué', 'Informations principales partagées']),
     } },
     { title: 'VPM 1 – Mix', preset: 'VPM1', slots: { general: gen('Quotidienne', 'Lundi au vendredi', '6h05/14h05/22h05', '10 min', 'Tableau VPM 1'), participants: part(['CDP'], ['Membres du service/atelier']) } },
     { title: 'VPM 1 – Pack', preset: 'VPM1', slots: { general: gen('Quotidienne', 'Lundi au vendredi', '6h05/14h05/22h05', '10 min', 'Tableau VPM 1'), participants: part(['CDP'], ['Membres du service/atelier']) } },
