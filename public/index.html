@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de documents GED</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/editor.css">
+</head>
+<body>
+<header id="top">
+  <strong class="brand">Éditeur de documents</strong>
+  <span id="docinfo"></span>
+  <span class="spacer"></span>
+  <span id="savestate" class="muted"></span>
+  <label class="who">Connecté en tant que
+    <select id="user"></select>
+  </label>
+</header>
+
+<div id="layout">
+  <nav id="list" aria-label="Documents"></nav>
+  <section id="editor" aria-label="Édition"></section>
+  <section id="preview" aria-label="Aperçu">
+    <div class="pvbar">
+      <span class="muted">Aperçu à l’écran — la pagination exacte et le cartouche paginé sont dans le PDF.</span>
+      <button id="btn-pdf" class="btn">Aperçu PDF</button>
+    </div>
+    <iframe id="frame" title="Aperçu du document"></iframe>
+  </section>
+</div>
+
+<nav id="tabs" aria-label="Affichage">
+  <button data-tab="editor" class="on">Édition</button>
+  <button data-tab="preview">Aperçu</button>
+</nav>
+
+<div id="modal" hidden>
+  <div class="mbar"><b>Aperçu PDF</b><button id="mclose" class="btn">Fermer</button></div>
+  <iframe id="pdfframe" title="PDF"></iframe>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="/editor.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "ged-doc-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prototype d'éditeur de documents structurés (cartouche standard + corps configurable) intégrable à une GED",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "qrcode-generator": "^2.0.4"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.50"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  }
+}
